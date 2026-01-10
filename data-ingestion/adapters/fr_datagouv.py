@@ -149,11 +149,12 @@ class FRDataGouvAdapter(BaseAdapter):
 
         # Generate H3 index
         try:
-            h3_index = h3.geo_to_h3(latitude, longitude, 5)
+            h3_index = h3.latlng_to_cell(latitude, longitude, 5)
         except Exception:
             h3_index = None
 
-        location_id = f"loc_fr_{matched_region.lower().replace(' ', '_').replace('-', '_').replace(\"'\", '')[:25]}"
+        clean_name = matched_region.lower().replace(' ', '_').replace('-', '_').replace("'", '')[:25]
+        location_id = f"loc_fr_{clean_name}"
 
         return LocationData(
             location_id=location_id,

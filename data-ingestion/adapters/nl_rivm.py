@@ -138,7 +138,7 @@ class NLRIVMAdapter(BaseAdapter):
 
         # Generate H3 index
         try:
-            h3_index = h3.geo_to_h3(latitude, longitude, 7)
+            h3_index = h3.latlng_to_cell(latitude, longitude, 7)
         except Exception:
             h3_index = None
 

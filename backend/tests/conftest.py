@@ -8,14 +8,19 @@ from typing import AsyncGenerator, Generator
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from httpx import AsyncClient
-from fastapi.testclient import TestClient
-
 # Import app and models
 import sys
 sys.path.insert(0, str(__file__).rsplit('/tests', 1)[0])
 
-from app.main import app
+# Lazy import for app - only when needed for integration tests
+_app = None
+
+def get_app():
+    global _app
+    if _app is None:
+        from app.main import app
+        _app = app
+    return _app
 
 
 # Event loop fixture for async tests
@@ -27,19 +32,21 @@ def event_loop() -> Generator:
     loop.close()
 
 
-# Sync test client
+# Sync test client (for integration tests)
 @pytest.fixture
 def client() -> Generator:
     """Create synchronous test client."""
-    with TestClient(app) as c:
+    from fastapi.testclient import TestClient
+    with TestClient(get_app()) as c:
         yield c
 
 
-# Async test client
+# Async test client (for integration tests)
 @pytest.fixture
 async def async_client() -> AsyncGenerator:
     """Create async test client."""
-    async with AsyncClient(app=app, base_url="http://test") as ac:
+    from httpx import AsyncClient
+    async with AsyncClient(app=get_app(), base_url="http://test") as ac:
         yield ac
 
 
@@ -115,6 +122,7 @@ def sample_cdc_response():
         {
             "wwtp_id": "WWTP_123",
             "reporting_jurisdiction": "New York",
+            "state": "NY",
             "county_names": "New York County",
             "county_fips": "36061",
             "population_served": 5000000,
@@ -123,10 +131,13 @@ def sample_cdc_response():
             "ptc_15d": 15.5,
             "percentile": 75,
             "detect_prop_15d": 0.95,
+            "wwtp_latitude": 40.7128,
+            "wwtp_longitude": -74.0060,
         },
         {
             "wwtp_id": "WWTP_456",
             "reporting_jurisdiction": "California",
+            "state": "CA",
             "county_names": "Los Angeles County",
             "county_fips": "06037",
             "population_served": 3000000,
@@ -135,6 +146,8 @@ def sample_cdc_response():
             "ptc_15d": -5.2,
             "percentile": 45,
             "detect_prop_15d": 0.88,
+            "wwtp_latitude": 34.0522,
+            "wwtp_longitude": -118.2437,
         },
     ]
 
