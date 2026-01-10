@@ -1,0 +1,21 @@
+{
+  "name": "viral-weather-e2e",
+  "version": "1.0.0",
+  "description": "End-to-end tests for Viral Weather platform",
+  "scripts": {
+    "test": "playwright test",
+    "test:ui": "playwright test --ui",
+    "test:headed": "playwright test --headed",
+    "test:chromium": "playwright test --project=chromium",
+    "test:firefox": "playwright test --project=firefox",
+    "test:webkit": "playwright test --project=webkit",
+    "test:mobile": "playwright test --project=mobile-chrome --project=mobile-safari",
+    "test:api": "playwright test tests/api-integration.spec.ts",
+    "report": "playwright show-report",
+    "install-browsers": "playwright install"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.40.0",
+    "@types/node": "^20.10.0"
+  }
+}
