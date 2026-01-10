@@ -125,3 +125,79 @@ export async function autocomplete(
 ): Promise<Array<{ id: string; label: string }>> {
   return fetchApi(`/api/search/autocomplete?q=${encodeURIComponent(query)}&limit=${limit}`);
 }
+
+// Flight arcs
+export async function getFlightArcs(params?: {
+  date?: string;
+  minPassengers?: number;
+  originCountry?: string;
+  destCountry?: string;
+}): Promise<{
+  arcs: Array<{
+    arc_id: string;
+    origin_lat: number;
+    origin_lon: number;
+    origin_name: string;
+    origin_country: string;
+    dest_lat: number;
+    dest_lon: number;
+    dest_name: string;
+    dest_country: string;
+    pax_estimate: number;
+    flight_count: number;
+    origin_risk: number | null;
+  }>;
+  total: number;
+  date: string;
+}> {
+  const searchParams = new URLSearchParams();
+  if (params?.date) searchParams.set('date', params.date);
+  if (params?.minPassengers) searchParams.set('min_pax', params.minPassengers.toString());
+  if (params?.originCountry) searchParams.set('origin_country', params.originCountry);
+  if (params?.destCountry) searchParams.set('dest_country', params.destCountry);
+
+  const query = searchParams.toString();
+  return fetchApi(`/api/flights/arcs${query ? `?${query}` : ''}`);
+}
+
+export async function getImportPressure(locationId: string): Promise<{
+  location_id: string;
+  import_pressure: number;
+  top_sources: Array<{
+    origin_name: string;
+    origin_country: string;
+    passengers: number;
+    risk_contribution: number;
+  }>;
+  timestamp: string;
+}> {
+  return fetchApi(`/api/flights/import-pressure/${locationId}`);
+}
+
+// Historical data
+export async function getHistoricalData(params: {
+  startDate: string;
+  endDate: string;
+  locationIds?: string[];
+  granularity?: 'daily' | 'weekly';
+}): Promise<{
+  data: Array<{
+    location_id: string;
+    date: string;
+    risk_score: number | null;
+    velocity: number | null;
+    variants: string[];
+  }>;
+  locations: number;
+  date_range: { start: string; end: string };
+}> {
+  const searchParams = new URLSearchParams();
+  searchParams.set('start_date', params.startDate);
+  searchParams.set('end_date', params.endDate);
+  if (params.granularity) searchParams.set('granularity', params.granularity);
+  if (params.locationIds?.length) {
+    params.locationIds.forEach(id => searchParams.append('location_id', id));
+  }
+
+  return fetchApi(`/api/history?${searchParams.toString()}`);
+}
