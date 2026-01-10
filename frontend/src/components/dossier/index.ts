@@ -1,0 +1,1 @@
+export { DossierPanel } from "./DossierPanel";
