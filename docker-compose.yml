@@ -1,0 +1,76 @@
+# Viral Weather - Local Development Docker Compose
+
+version: '3.8'
+
+services:
+  # PostgreSQL + PostGIS
+  postgres:
+    image: postgis/postgis:15-3.4
+    container_name: viral-weather-db
+    environment:
+      POSTGRES_DB: viral_weather
+      POSTGRES_USER: viral_weather_app
+      POSTGRES_PASSWORD: localdevpassword
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/app/models/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U viral_weather_app -d viral_weather"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    container_name: viral-weather-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: viral-weather-api
+    environment:
+      DATABASE_URL: postgresql://viral_weather_app:localdevpassword@postgres:5432/viral_weather
+      REDIS_URL: redis://redis:6379
+      DEBUG: "true"
+      CORS_ORIGINS: "http://localhost:3000"
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend/app:/app/app:ro
+
+  # Frontend (development)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: viral-weather-web
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+      NEXT_PUBLIC_MAPBOX_TOKEN: ${MAPBOX_TOKEN:-}
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+  redis_data:

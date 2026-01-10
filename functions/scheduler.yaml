@@ -1,0 +1,81 @@
+# Cloud Scheduler jobs for Viral Weather data ingestion
+# Deploy with: gcloud scheduler jobs create http JOB_NAME ...
+
+jobs:
+  # CDC NWSS Wastewater Data (USA)
+  # Tue/Thu 6am UTC - aligns with CDC update schedule
+  - name: ingest-cdc-nwss
+    schedule: "0 6 * * 2,4"
+    timeZone: "UTC"
+    uri: "${FUNCTION_URL}/ingest_cdc_nwss"
+    httpMethod: POST
+    description: "Fetch CDC NWSS wastewater surveillance data"
+    retryConfig:
+      retryCount: 3
+      minBackoffDuration: "5s"
+      maxBackoffDuration: "60s"
+
+  # European Sources (UK, NL, DE, FR)
+  # Mon/Wed/Fri 8am UTC
+  - name: ingest-european-sources
+    schedule: "0 8 * * 1,3,5"
+    timeZone: "UTC"
+    uri: "${FUNCTION_URL}/ingest_european_sources"
+    httpMethod: POST
+    description: "Fetch European wastewater data (UKHSA, RIVM, RKI, data.gouv)"
+    retryConfig:
+      retryCount: 3
+      minBackoffDuration: "10s"
+      maxBackoffDuration: "120s"
+
+  # Asia-Pacific Sources (Japan, Australia)
+  # Tue/Fri 2am UTC
+  - name: ingest-apac-sources
+    schedule: "0 2 * * 2,5"
+    timeZone: "UTC"
+    uri: "${FUNCTION_URL}/ingest_apac_sources"
+    httpMethod: POST
+    description: "Fetch APAC wastewater data (NIID, AU Health)"
+    retryConfig:
+      retryCount: 3
+      minBackoffDuration: "10s"
+      maxBackoffDuration: "120s"
+
+  # Flight Data (AviationStack)
+  # Every 6 hours to stay within API budget
+  - name: ingest-flight-data
+    schedule: "0 */6 * * *"
+    timeZone: "UTC"
+    uri: "${FUNCTION_URL}/ingest_flight_data"
+    httpMethod: POST
+    description: "Fetch flight route data from AviationStack"
+    retryConfig:
+      retryCount: 2
+      minBackoffDuration: "30s"
+      maxBackoffDuration: "300s"
+
+  # Risk Score Calculation
+  # Every hour to keep scores fresh
+  - name: calculate-risk-scores
+    schedule: "0 * * * *"
+    timeZone: "UTC"
+    uri: "${FUNCTION_URL}/calculate_risk_scores"
+    httpMethod: POST
+    description: "Recalculate risk scores for all locations"
+    retryConfig:
+      retryCount: 2
+      minBackoffDuration: "10s"
+      maxBackoffDuration: "60s"
+
+  # Data Quality Check
+  # Daily at 9am UTC
+  - name: data-quality-check
+    schedule: "0 9 * * *"
+    timeZone: "UTC"
+    uri: "${FUNCTION_URL}/data_quality_check"
+    httpMethod: POST
+    description: "Check data freshness and quality"
+    retryConfig:
+      retryCount: 1
+      minBackoffDuration: "60s"
+      maxBackoffDuration: "120s"
