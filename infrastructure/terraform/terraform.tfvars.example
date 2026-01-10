@@ -1,0 +1,15 @@
+# Viral Weather - Terraform Variables Example
+# Copy this file to terraform.tfvars and fill in your values
+
+# Required
+project_id  = "your-gcp-project-id"
+db_password = "your-secure-database-password"
+
+# Optional (defaults provided)
+region      = "us-central1"
+environment = "development"
+db_tier     = "db-f1-micro"  # Use "db-custom-2-8192" for production
+
+# API Keys (can also be set via environment variables)
+# aviationstack_api_key = "your-aviationstack-key"
+# mapbox_token          = "your-mapbox-token"
