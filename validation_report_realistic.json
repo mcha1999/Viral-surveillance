@@ -1,0 +1,85 @@
+{
+  "summary": {
+    "total_tests": 3,
+    "passed": 1,
+    "failed": 2,
+    "pass_rate": 0.3333333333333333,
+    "overall_verdict": "NEEDS IMPROVEMENT",
+    "generated_at": "2026-01-11T00:54:21.600515"
+  },
+  "results": [
+    {
+      "hypothesis": "H1: Import pressure predicts variant arrival timing",
+      "test": "Spearman rank correlation",
+      "metric": "Average correlation (import pressure vs arrival rank)",
+      "value": 0.5173999295076172,
+      "p_value": null,
+      "passed": "False",
+      "details": {
+        "variants_tested": {
+          "JN.1": {
+            "correlation": 0.9748243359065808,
+            "p_value": 8.133774702684449e-06,
+            "n_locations": 9,
+            "significant": "True"
+          },
+          "BA.2.86": {
+            "correlation": 0.9874208829065748,
+            "p_value": 7.260880751695502e-07,
+            "n_locations": 9,
+            "significant": "True"
+          },
+          "EG.5": {
+            "correlation": -0.41004543029030427,
+            "p_value": 0.27302974714377237,
+            "n_locations": 9,
+            "significant": "False"
+          }
+        },
+        "interpretation": "Negative correlation means higher import pressure associates with earlier variant arrival (lower rank = earlier)"
+      }
+    },
+    {
+      "hypothesis": "H2: Risk score predicts wastewater surge",
+      "test": "14-day forecast accuracy",
+      "metric": "Directional accuracy",
+      "value": 0.2571428571428571,
+      "p_value": null,
+      "passed": false,
+      "details": {
+        "rmse": 87.8607755105727,
+        "mae": 78.35872896101642,
+        "baseline_rmse_no_change": 69.50730888074472,
+        "baseline_rmse_persistence": 48.68953639239686,
+        "improvement_vs_baseline": -26.405088796226366,
+        "n_predictions": 525,
+        "directional_accuracy": 0.2571428571428571,
+        "interpretation": "Model predicts direction correctly 25.7% of time. RMSE 87.86 vs baseline 69.51 (worse than naive)"
+      }
+    },
+    {
+      "hypothesis": "Lead time analysis",
+      "test": "Advance warning before variant arrival",
+      "metric": "Median lead time (days)",
+      "value": 60.0,
+      "p_value": null,
+      "passed": "True",
+      "details": {
+        "variant": "JN.1",
+        "risk_threshold": 40,
+        "median_lead_time": 60.0,
+        "mean_lead_time": 56.666666666666664,
+        "min_lead_time": "43",
+        "max_lead_time": "60",
+        "locations_with_warning": 9,
+        "locations_without_warning": 0,
+        "pct_locations_warned": 100.0,
+        "interpretation": "Model provided 60 days median advance warning for 9/9 locations (100%)"
+      }
+    }
+  ],
+  "recommendations": [
+    "Consider adding more granular flight data (actual passenger counts) or incorporating layover/connection flight patterns",
+    "Risk score formula may need recalibration. Consider adding: seasonality factors, population immunity estimates, or variant-specific transmissibility"
+  ]
+}
