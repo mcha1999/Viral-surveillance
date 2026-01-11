@@ -2,16 +2,257 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Custom styles */
-:root {
-  --risk-low: #22c55e;
-  --risk-medium: #f59e0b;
-  --risk-high: #ef4444;
-  --risk-critical: #7c2d12;
+/* ============================================
+   VIRAL WEATHER DESIGN SYSTEM
+   ============================================ */
+
+@layer base {
+  :root {
+    /* Brand Colors */
+    --color-primary: #3B82F6;
+    --color-primary-dark: #1D4ED8;
+    --color-primary-light: #93C5FD;
+
+    /* Background Colors (Dark Theme for Globe) */
+    --color-bg-primary: #0F172A;
+    --color-bg-secondary: #1E293B;
+    --color-bg-elevated: #334155;
+    --color-bg-panel: #171717;
+
+    /* Text Colors */
+    --color-text-primary: #F8FAFC;
+    --color-text-secondary: #CBD5E1;
+    --color-text-muted: #64748B;
+
+    /* Border Colors */
+    --color-border: #334155;
+    --color-border-light: #475569;
+
+    /* Risk Level Colors */
+    --risk-low: #22C55E;
+    --risk-low-rgb: 34, 197, 94;
+    --risk-moderate: #EAB308;
+    --risk-moderate-rgb: 234, 179, 8;
+    --risk-elevated: #F97316;
+    --risk-elevated-rgb: 249, 115, 22;
+    --risk-high: #EF4444;
+    --risk-high-rgb: 239, 68, 68;
+    --risk-very-high: #991B1B;
+    --risk-very-high-rgb: 153, 27, 27;
+    /* Legacy aliases */
+    --risk-medium: #f59e0b;
+    --risk-critical: #7c2d12;
+
+    /* Data Freshness Colors */
+    --freshness-current: #22C55E;
+    --freshness-stale: #EAB308;
+    --freshness-old: #F97316;
+    --freshness-expired: #6B7280;
+
+    /* Shadows */
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+
+    /* Transitions */
+    --transition-fast: 150ms ease-out;
+    --transition-base: 200ms ease-out;
+    --transition-slow: 300ms ease-out;
+
+    /* Globe specific */
+    --globe-zoom-duration: 1500ms;
+
+    /* Z-index scale */
+    --z-base: 0;
+    --z-dropdown: 100;
+    --z-sticky: 200;
+    --z-overlay: 300;
+    --z-modal: 400;
+    --z-popover: 500;
+    --z-tooltip: 600;
+  }
+
+  /* Light mode overrides for panels */
+  .panel-light {
+    --color-bg-panel: #FFFFFF;
+    --color-text-primary: #1E293B;
+    --color-text-secondary: #64748B;
+    --color-border: #E2E8F0;
+  }
 }
 
-/* Hide Mapbox logo in development */
-.mapboxgl-ctrl-logo {
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    @apply antialiased;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  /* Focus styles */
+  :focus-visible {
+    @apply outline-none ring-2 ring-primary ring-offset-2 ring-offset-background;
+  }
+
+  /* Reduced motion */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer components {
+  /* Risk Badge Variants */
+  .risk-badge-low {
+    @apply bg-risk-low/20 text-risk-low border-risk-low/30;
+  }
+
+  .risk-badge-moderate {
+    @apply bg-risk-moderate/20 text-risk-moderate border-risk-moderate/30;
+  }
+
+  .risk-badge-elevated {
+    @apply bg-risk-elevated/20 text-risk-elevated border-risk-elevated/30;
+  }
+
+  .risk-badge-high {
+    @apply bg-risk-high/20 text-risk-high border-risk-high/30;
+  }
+
+  .risk-badge-very-high {
+    @apply bg-risk-very-high/20 text-risk-very-high border-risk-very-high/30;
+  }
+
+  /* Glowing dot indicator */
+  .dot-indicator {
+    @apply w-2 h-2 rounded-full;
+  }
+
+  .dot-indicator-pulse {
+    @apply animate-pulse-slow;
+  }
+
+  /* Panel styles */
+  .panel {
+    @apply bg-background-panel rounded-lg shadow-panel;
+  }
+
+  .panel-elevated {
+    @apply bg-background-elevated rounded-lg shadow-panel-lg;
+  }
+
+  /* Glass effect */
+  .glass {
+    @apply bg-white/10 backdrop-blur-md border border-white/20;
+  }
+
+  .glass-dark {
+    @apply bg-black/30 backdrop-blur-md border border-white/10;
+  }
+
+  /* Custom scrollbar styling */
+  .custom-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-border) transparent;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background-color: var(--color-border);
+    border-radius: 3px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: var(--color-border-light);
+  }
+}
+
+@layer utilities {
+  /* Text utilities */
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  /* Gradient text */
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-primary to-primary-light;
+  }
+
+  /* Risk gradients */
+  .gradient-risk-low {
+    @apply bg-gradient-to-r from-risk-low to-green-600;
+  }
+
+  .gradient-risk-moderate {
+    @apply bg-gradient-to-r from-risk-moderate to-yellow-600;
+  }
+
+  .gradient-risk-elevated {
+    @apply bg-gradient-to-r from-risk-elevated to-orange-600;
+  }
+
+  .gradient-risk-high {
+    @apply bg-gradient-to-r from-risk-high to-red-600;
+  }
+
+  .gradient-risk-very-high {
+    @apply bg-gradient-to-r from-risk-very-high to-red-900;
+  }
+
+  /* Hide scrollbar */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Touch target sizing */
+  .touch-target {
+    @apply min-h-[44px] min-w-[44px];
+  }
+
+  /* Safe area padding for mobile */
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+
+  .safe-top {
+    padding-top: env(safe-area-inset-top, 0);
+  }
+}
+
+/* ============================================
+   LAYOUT COMPONENTS
+   ============================================ */
+
+/* Hide Mapbox logo */
+.mapboxgl-ctrl-logo,
+.mapboxgl-ctrl-attrib {
   display: none !important;
 }
 
@@ -73,7 +314,7 @@
   max-width: calc(100vw - 40px);
 }
 
-/* Risk badge */
+/* Legacy risk badge (for backwards compatibility) */
 .risk-badge {
   display: inline-flex;
   align-items: center;
@@ -102,6 +343,10 @@
   background: rgba(124, 45, 18, 0.2);
   color: var(--risk-critical);
 }
+
+/* ============================================
+   ANIMATIONS
+   ============================================ */
 
 /* Pulse animation for surging locations */
 @keyframes surge-pulse {
@@ -140,7 +385,7 @@
   }
 }
 
-/* Scrollbar styling */
+/* Default scrollbar styling */
 ::-webkit-scrollbar {
   width: 8px;
 }
@@ -158,18 +403,10 @@
   background: rgba(255, 255, 255, 0.3);
 }
 
-/* ============================================
-   Phase 2 & 3: Animation System
-   ============================================ */
-
 /* Animate-in utilities */
 @keyframes fade-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 @keyframes zoom-in {
@@ -252,13 +489,6 @@
   animation-duration: 500ms;
 }
 
-/* Tooltip arrow positioning fix */
-.tooltip-arrow {
-  position: absolute;
-  width: 0;
-  height: 0;
-}
-
 /* Modal backdrop */
 .modal-backdrop {
   backdrop-filter: blur(8px);
@@ -268,23 +498,6 @@
 /* Keyboard shortcut key styling */
 kbd {
   font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
-}
-
-/* Focus visible for accessibility */
-:focus-visible {
-  outline: 2px solid rgba(59, 130, 246, 0.5);
-  outline-offset: 2px;
-}
-
-/* Reduced motion preference */
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
 }
 
 /* Progress bar gradient */
@@ -302,12 +515,8 @@ kbd {
 
 /* Data freshness indicator pulse */
 @keyframes freshness-pulse {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.5;
-  }
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }
 
 .freshness-current {
@@ -352,3 +561,7 @@ kbd {
     padding: 0 16px;
   }
 }
+
+/* Font imports */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap');

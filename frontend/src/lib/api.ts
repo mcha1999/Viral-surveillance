@@ -122,7 +122,7 @@ export async function searchLocations(
 export async function autocomplete(
   query: string,
   limit: number = 5
-): Promise<Array<{ id: string; label: string }>> {
+): Promise<Array<{ id: string; label: string; risk_score?: number }>> {
   return fetchApi(`/api/search/autocomplete?q=${encodeURIComponent(query)}&limit=${limit}`);
 }
 
