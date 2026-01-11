@@ -1,0 +1,118 @@
+{
+  "summary": {
+    "total_tests": 4,
+    "passed": 3,
+    "failed": 1,
+    "pass_rate": 0.75,
+    "overall_verdict": "VALIDATED",
+    "generated_at": "2026-01-11T02:23:52.991774"
+  },
+  "results": [
+    {
+      "hypothesis": "H1: Import pressure predicts variant arrival timing",
+      "test": "Spearman rank correlation",
+      "metric": "Average correlation (import pressure vs arrival rank)",
+      "value": 0.3931261884464794,
+      "p_value": null,
+      "passed": true,
+      "details": {
+        "variants_tested": {
+          "JN.1": {
+            "correlation": 0.6274875388888456,
+            "p_value": 7.858243203572282e-10,
+            "n_locations": 78,
+            "significant": "True"
+          },
+          "BA.2.86": {
+            "correlation": 0.6232122812174009,
+            "p_value": 1.1041614612950246e-09,
+            "n_locations": 78,
+            "significant": "True"
+          },
+          "EG.5": {
+            "correlation": 0.14343197142067843,
+            "p_value": 0.21028060886533928,
+            "n_locations": 78,
+            "significant": "False"
+          },
+          "KP.2": {
+            "correlation": 0.17837296225899274,
+            "p_value": 0.11817678574151547,
+            "n_locations": 78,
+            "significant": "False"
+          }
+        },
+        "significant_variants": 2,
+        "interpretation": "Strong correlation (positive or negative) indicates import pressure predicts variant arrival timing. High-connectivity hubs typically show positive correlation (high pressure + early arrival)."
+      }
+    },
+    {
+      "hypothesis": "H2: Risk score predicts wastewater surge",
+      "test": "14-day forecast accuracy",
+      "metric": "Directional accuracy",
+      "value": 0.29714285714285715,
+      "p_value": null,
+      "passed": false,
+      "details": {
+        "rmse": 89.44878521590863,
+        "mae": 72.88315184295364,
+        "baseline_rmse_no_change": 68.29984443911377,
+        "baseline_rmse_persistence": 50.868295482420464,
+        "improvement_vs_baseline": -30.9648447232529,
+        "n_predictions": 525,
+        "directional_accuracy": 0.29714285714285715,
+        "interpretation": "Model predicts direction correctly 29.7% of time. RMSE 89.45 vs baseline 68.30 (worse than naive)"
+      }
+    },
+    {
+      "hypothesis": "H3: High import pressure = faster propagation",
+      "test": "Mann-Whitney U test",
+      "metric": "Median days difference (high vs low pressure)",
+      "value": 42.0,
+      "p_value": 0.00024796860633136944,
+      "passed": "True",
+      "details": {
+        "variant": "JN.1",
+        "high_pressure_median_days": 126.0,
+        "low_pressure_median_days": 168.0,
+        "high_pressure_n": 20,
+        "low_pressure_n": 28,
+        "effect_size_days": 42.0,
+        "interpretation": "High-pressure locations took median 126 days to 50% prevalence vs 168 days for low-pressure locations"
+      }
+    },
+    {
+      "hypothesis": "Lead time analysis",
+      "test": "Advance warning before variant arrival",
+      "metric": "Median lead time (days)",
+      "value": 43.0,
+      "p_value": null,
+      "passed": "True",
+      "details": {
+        "variant": "JN.1",
+        "risk_threshold": 40,
+        "median_lead_time": 43.0,
+        "mean_lead_time": 42.3,
+        "min_lead_time": "15",
+        "max_lead_time": "60",
+        "locations_with_warning": 50,
+        "locations_without_warning": 28,
+        "pct_locations_warned": 64.1025641025641,
+        "interpretation": "Model provided 43 days median advance warning for 50/78 locations (64%)"
+      }
+    }
+  ],
+  "recommendations": [
+    "Risk score formula may need recalibration. Consider adding: seasonality factors, population immunity estimates, or variant-specific transmissibility"
+  ],
+  "international_coverage": {
+    "countries": 28,
+    "international_routes": 62,
+    "international_origin_variants": [
+      "EG.5",
+      "BA.2.86",
+      "JN.1",
+      "KP.2"
+    ]
+  }
+}
