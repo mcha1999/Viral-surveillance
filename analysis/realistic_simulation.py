@@ -29,28 +29,63 @@ class RealisticEpiSimulator:
     def __init__(self, seed: int = 42):
         np.random.seed(seed)
 
-        # US state populations (millions) - top 20 states
+        # All 50 US states with populations (millions), coordinates, and connectivity scores
         self.states = {
-            'California': {'pop': 39.5, 'hubs': ['LAX', 'SFO'], 'lat': 36.7, 'connectivity': 1.0},
-            'Texas': {'pop': 29.5, 'hubs': ['DFW', 'IAH'], 'lat': 31.0, 'connectivity': 0.9},
-            'Florida': {'pop': 22.2, 'hubs': ['MIA', 'MCO'], 'lat': 27.6, 'connectivity': 0.95},
-            'New York': {'pop': 19.3, 'hubs': ['JFK', 'LGA'], 'lat': 42.9, 'connectivity': 1.0},
-            'Pennsylvania': {'pop': 13.0, 'hubs': ['PHL'], 'lat': 41.2, 'connectivity': 0.7},
-            'Illinois': {'pop': 12.6, 'hubs': ['ORD'], 'lat': 40.6, 'connectivity': 0.9},
-            'Ohio': {'pop': 11.8, 'hubs': ['CLE'], 'lat': 40.4, 'connectivity': 0.6},
-            'Georgia': {'pop': 10.9, 'hubs': ['ATL'], 'lat': 32.2, 'connectivity': 0.95},
-            'North Carolina': {'pop': 10.6, 'hubs': ['CLT'], 'lat': 35.8, 'connectivity': 0.7},
-            'Michigan': {'pop': 10.0, 'hubs': ['DTW'], 'lat': 44.3, 'connectivity': 0.65},
-            'New Jersey': {'pop': 9.3, 'hubs': ['EWR'], 'lat': 40.1, 'connectivity': 0.8},
-            'Virginia': {'pop': 8.6, 'hubs': ['IAD'], 'lat': 37.4, 'connectivity': 0.75},
-            'Washington': {'pop': 7.7, 'hubs': ['SEA'], 'lat': 47.8, 'connectivity': 0.8},
-            'Arizona': {'pop': 7.3, 'hubs': ['PHX'], 'lat': 34.0, 'connectivity': 0.75},
-            'Massachusetts': {'pop': 7.0, 'hubs': ['BOS'], 'lat': 42.4, 'connectivity': 0.85},
-            'Tennessee': {'pop': 7.0, 'hubs': ['BNA'], 'lat': 35.5, 'connectivity': 0.6},
-            'Indiana': {'pop': 6.8, 'hubs': ['IND'], 'lat': 40.3, 'connectivity': 0.55},
-            'Missouri': {'pop': 6.2, 'hubs': ['STL'], 'lat': 37.9, 'connectivity': 0.6},
-            'Maryland': {'pop': 6.2, 'hubs': ['BWI'], 'lat': 39.0, 'connectivity': 0.7},
-            'Colorado': {'pop': 5.8, 'hubs': ['DEN'], 'lat': 39.0, 'connectivity': 0.8},
+            # Major hubs (connectivity >= 0.8)
+            'California': {'pop': 39.5, 'hubs': ['LAX', 'SFO'], 'lat': 36.7, 'lon': -119.4, 'connectivity': 1.0},
+            'Texas': {'pop': 29.5, 'hubs': ['DFW', 'IAH'], 'lat': 31.0, 'lon': -99.9, 'connectivity': 0.95},
+            'Florida': {'pop': 22.2, 'hubs': ['MIA', 'MCO'], 'lat': 27.6, 'lon': -81.5, 'connectivity': 0.95},
+            'New York': {'pop': 19.3, 'hubs': ['JFK', 'LGA'], 'lat': 42.9, 'lon': -75.5, 'connectivity': 1.0},
+            'Illinois': {'pop': 12.6, 'hubs': ['ORD'], 'lat': 40.6, 'lon': -89.4, 'connectivity': 0.95},
+            'Georgia': {'pop': 10.9, 'hubs': ['ATL'], 'lat': 32.2, 'lon': -83.6, 'connectivity': 0.98},
+            'Washington': {'pop': 7.7, 'hubs': ['SEA'], 'lat': 47.8, 'lon': -120.7, 'connectivity': 0.85},
+            'Massachusetts': {'pop': 7.0, 'hubs': ['BOS'], 'lat': 42.4, 'lon': -71.4, 'connectivity': 0.88},
+            'Colorado': {'pop': 5.8, 'hubs': ['DEN'], 'lat': 39.0, 'lon': -105.5, 'connectivity': 0.85},
+            'Nevada': {'pop': 3.1, 'hubs': ['LAS'], 'lat': 38.8, 'lon': -116.4, 'connectivity': 0.82},
+
+            # Secondary hubs (connectivity 0.6-0.8)
+            'Pennsylvania': {'pop': 13.0, 'hubs': ['PHL'], 'lat': 41.2, 'lon': -77.2, 'connectivity': 0.75},
+            'Ohio': {'pop': 11.8, 'hubs': ['CLE', 'CMH'], 'lat': 40.4, 'lon': -82.9, 'connectivity': 0.65},
+            'North Carolina': {'pop': 10.6, 'hubs': ['CLT', 'RDU'], 'lat': 35.8, 'lon': -79.0, 'connectivity': 0.75},
+            'Michigan': {'pop': 10.0, 'hubs': ['DTW'], 'lat': 44.3, 'lon': -85.6, 'connectivity': 0.70},
+            'New Jersey': {'pop': 9.3, 'hubs': ['EWR'], 'lat': 40.1, 'lon': -74.4, 'connectivity': 0.78},
+            'Virginia': {'pop': 8.6, 'hubs': ['IAD', 'DCA'], 'lat': 37.4, 'lon': -78.2, 'connectivity': 0.75},
+            'Arizona': {'pop': 7.3, 'hubs': ['PHX'], 'lat': 34.0, 'lon': -111.4, 'connectivity': 0.78},
+            'Tennessee': {'pop': 7.0, 'hubs': ['BNA'], 'lat': 35.5, 'lon': -86.6, 'connectivity': 0.65},
+            'Minnesota': {'pop': 5.7, 'hubs': ['MSP'], 'lat': 46.7, 'lon': -94.7, 'connectivity': 0.72},
+            'Maryland': {'pop': 6.2, 'hubs': ['BWI'], 'lat': 39.0, 'lon': -76.6, 'connectivity': 0.70},
+            'Missouri': {'pop': 6.2, 'hubs': ['STL', 'MCI'], 'lat': 37.9, 'lon': -91.8, 'connectivity': 0.62},
+            'Indiana': {'pop': 6.8, 'hubs': ['IND'], 'lat': 40.3, 'lon': -86.1, 'connectivity': 0.58},
+            'Wisconsin': {'pop': 5.9, 'hubs': ['MKE'], 'lat': 43.8, 'lon': -88.8, 'connectivity': 0.55},
+            'Oregon': {'pop': 4.2, 'hubs': ['PDX'], 'lat': 43.8, 'lon': -120.6, 'connectivity': 0.65},
+            'Louisiana': {'pop': 4.6, 'hubs': ['MSY'], 'lat': 31.2, 'lon': -91.9, 'connectivity': 0.58},
+            'Kentucky': {'pop': 4.5, 'hubs': ['SDF'], 'lat': 37.8, 'lon': -85.8, 'connectivity': 0.52},
+            'Utah': {'pop': 3.3, 'hubs': ['SLC'], 'lat': 39.3, 'lon': -111.1, 'connectivity': 0.68},
+
+            # Lower connectivity states (< 0.6)
+            'South Carolina': {'pop': 5.1, 'hubs': ['CHS'], 'lat': 34.0, 'lon': -81.0, 'connectivity': 0.50},
+            'Alabama': {'pop': 5.0, 'hubs': ['BHM'], 'lat': 32.3, 'lon': -86.9, 'connectivity': 0.45},
+            'Oklahoma': {'pop': 4.0, 'hubs': ['OKC'], 'lat': 35.0, 'lon': -97.1, 'connectivity': 0.48},
+            'Connecticut': {'pop': 3.6, 'hubs': ['BDL'], 'lat': 41.6, 'lon': -73.1, 'connectivity': 0.52},
+            'Iowa': {'pop': 3.2, 'hubs': ['DSM'], 'lat': 42.0, 'lon': -93.2, 'connectivity': 0.40},
+            'Arkansas': {'pop': 3.0, 'hubs': ['LIT'], 'lat': 35.2, 'lon': -91.8, 'connectivity': 0.38},
+            'Kansas': {'pop': 2.9, 'hubs': ['MCI'], 'lat': 39.0, 'lon': -98.5, 'connectivity': 0.42},
+            'Mississippi': {'pop': 3.0, 'hubs': ['JAN'], 'lat': 32.4, 'lon': -89.4, 'connectivity': 0.35},
+            'New Mexico': {'pop': 2.1, 'hubs': ['ABQ'], 'lat': 35.7, 'lon': -105.9, 'connectivity': 0.45},
+            'Nebraska': {'pop': 2.0, 'hubs': ['OMA'], 'lat': 41.1, 'lon': -99.1, 'connectivity': 0.42},
+            'Idaho': {'pop': 1.9, 'hubs': ['BOI'], 'lat': 44.1, 'lon': -114.7, 'connectivity': 0.40},
+            'West Virginia': {'pop': 1.8, 'hubs': [], 'lat': 38.6, 'lon': -80.5, 'connectivity': 0.25},
+            'Hawaii': {'pop': 1.5, 'hubs': ['HNL'], 'lat': 19.9, 'lon': -155.6, 'connectivity': 0.55},
+            'New Hampshire': {'pop': 1.4, 'hubs': ['MHT'], 'lat': 43.2, 'lon': -71.6, 'connectivity': 0.35},
+            'Maine': {'pop': 1.4, 'hubs': ['PWM'], 'lat': 45.3, 'lon': -69.4, 'connectivity': 0.32},
+            'Montana': {'pop': 1.1, 'hubs': ['BZN'], 'lat': 46.9, 'lon': -110.4, 'connectivity': 0.30},
+            'Rhode Island': {'pop': 1.1, 'hubs': ['PVD'], 'lat': 41.6, 'lon': -71.5, 'connectivity': 0.38},
+            'Delaware': {'pop': 1.0, 'hubs': [], 'lat': 39.2, 'lon': -75.5, 'connectivity': 0.30},
+            'South Dakota': {'pop': 0.9, 'hubs': ['FSD'], 'lat': 43.9, 'lon': -99.4, 'connectivity': 0.28},
+            'North Dakota': {'pop': 0.8, 'hubs': ['FAR'], 'lat': 47.5, 'lon': -100.5, 'connectivity': 0.25},
+            'Alaska': {'pop': 0.7, 'hubs': ['ANC'], 'lat': 64.2, 'lon': -152.5, 'connectivity': 0.45},
+            'Vermont': {'pop': 0.6, 'hubs': ['BTV'], 'lat': 44.0, 'lon': -72.7, 'connectivity': 0.28},
+            'Wyoming': {'pop': 0.6, 'hubs': [], 'lat': 43.1, 'lon': -107.3, 'connectivity': 0.22},
         }
 
         # Variant characteristics based on real data
@@ -149,18 +184,22 @@ class RealisticEpiSimulator:
                 # Add noise
                 viral_load *= np.random.lognormal(0, 0.15)
 
-                # Calculate week-over-week change
-                pct_change = np.random.normal(wave_contribution * 20, 10)
-
                 records.append({
                     'location_id': state,
                     'date': date,
                     'viral_load': viral_load,
-                    'pct_change_weekly': pct_change,
+                    'wave_contribution': wave_contribution,  # For debugging
                     'population': info['pop'] * 1e6
                 })
 
         df = pd.DataFrame(records)
+
+        # Calculate ACTUAL week-over-week change from the viral load data
+        df = df.sort_values(['location_id', 'date'])
+        df['prev_load'] = df.groupby('location_id')['viral_load'].shift(1)
+        df['pct_change_weekly'] = ((df['viral_load'] - df['prev_load']) / df['prev_load'] * 100).fillna(0)
+        df = df.drop(columns=['prev_load', 'wave_contribution'])
+
         print(f"  Generated {len(df)} wastewater records")
         print(f"  States: {df['location_id'].nunique()}")
         print(f"  Date range: {df['date'].min()} to {df['date'].max()}")
@@ -221,18 +260,20 @@ class RealisticEpiSimulator:
                     days_since_arrival = (date - arrival_date).days
 
                     # Growth curve (logistic)
-                    carrying_capacity = s_info['pop'] * 10  # Max sequences
+                    # Scale by state population for realistic sequence counts
+                    carrying_capacity = max(s_info['pop'] * 50, 100)  # Min 100 for small states
                     growth_rate = v_info['spread_rate']
                     prevalence = carrying_capacity / (1 + np.exp(-growth_rate * (days_since_arrival - 60)))
 
-                    # Sampling probability (sequencing is sparse)
-                    sample_rate = 0.001
+                    # Sampling probability - higher for hub states (more sequencing capacity)
+                    base_sample_rate = 0.01
+                    sample_rate = base_sample_rate * (0.5 + s_info['connectivity'])
 
                     # Expected sequences
                     expected_sequences = prevalence * sample_rate
 
-                    # Add noise and sample
-                    if expected_sequences > 0.1:
+                    # Add noise and sample - lower threshold for more data
+                    if expected_sequences > 0.05:
                         sequences = np.random.poisson(max(1, expected_sequences))
                         if sequences > 0:
                             records.append({
