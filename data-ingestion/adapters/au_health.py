@@ -91,10 +91,12 @@ class AUHealthAdapter(BaseAdapter):
                 return records
 
         except httpx.HTTPError as e:
-            self.logger.warning(f"Failed to fetch AU Health API data: {e}")
-
-        # Fallback to synthetic data
-        return self._generate_synthetic_data()
+            self.logger.error(
+                f"Failed to fetch AU Health API data: {e}. "
+                "Returning empty data - NOT using synthetic fallback."
+            )
+            # Return empty data instead of silently using synthetic data
+            return []
 
     def _generate_synthetic_data(self) -> List[Dict[str, Any]]:
         """Generate synthetic data when real source unavailable."""

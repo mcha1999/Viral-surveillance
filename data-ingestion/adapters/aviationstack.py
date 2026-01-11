@@ -167,8 +167,13 @@ class AviationStackAdapter:
             List of flight records
         """
         if not self.api_key:
-            # Return synthetic data if no API key
-            return self._generate_synthetic_flights(departure_iata, arrival_iata)
+            # Log warning and return empty data - do NOT silently use synthetic data
+            import logging
+            logging.warning(
+                "AVIATIONSTACK_API_KEY not set - returning empty flight data. "
+                "Set the environment variable to fetch real flight routes."
+            )
+            return []
 
         cache_key = f"{departure_iata}:{arrival_iata}:{flight_date}"
         if cache_key in self._cache:
