@@ -73,7 +73,7 @@ export function GettingStarted({ onClose }: GettingStartedProps) {
     ...completedSteps,
   ];
 
-  const uniqueCompleted = [...new Set(actualCompletedSteps)];
+  const uniqueCompleted = Array.from(new Set(actualCompletedSteps));
   const progress = (uniqueCompleted.length / STEPS.length) * 100;
 
   // Hide if all steps complete

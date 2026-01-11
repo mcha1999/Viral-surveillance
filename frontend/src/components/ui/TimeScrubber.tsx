@@ -122,18 +122,16 @@ export function TimeScrubber({ currentDate, onDateChange }: TimeScrubberProps) {
     if (!isPlaying) return;
 
     const interval = setInterval(() => {
-      onDateChange((prev) => {
-        const next = addDays(prev, 1);
-        if (next > maxDate) {
-          setPlaying(false);
-          return prev;
-        }
-        return next;
-      });
+      const next = addDays(currentDate, 1);
+      if (next > maxDate) {
+        setPlaying(false);
+        return;
+      }
+      onDateChange(next);
     }, 500);
 
     return () => clearInterval(interval);
-  }, [isPlaying, maxDate, onDateChange, setPlaying]);
+  }, [isPlaying, currentDate, maxDate, onDateChange, setPlaying]);
 
   const isFuture = currentDate > today;
   const todayPosition = (historyDays / totalDays) * 100;

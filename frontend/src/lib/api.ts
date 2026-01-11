@@ -293,6 +293,8 @@ export async function getAllEvidenceChains(
       description: string;
       confidence: number;
       icon: string;
+      source_location?: string;
+      count?: number;
     }>;
     lead_time_days: number | null;
     chain_confidence: number;

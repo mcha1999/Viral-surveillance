@@ -31,7 +31,9 @@ function WatchlistItem({ locationId, onSelect, onRemove }: WatchlistItemProps) {
   }
 
   const riskScore = risk?.risk_score ?? location.risk_score;
-  const riskColor = riskScore >= 70
+  const riskColor = riskScore == null
+    ? 'text-gray-500'
+    : riskScore >= 70
     ? 'text-red-500'
     : riskScore >= 30
     ? 'text-amber-500'

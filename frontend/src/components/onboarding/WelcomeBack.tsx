@@ -116,7 +116,7 @@ export function WelcomeBack({ onDismiss }: WelcomeBackProps) {
               <span className={`text-sm font-semibold ${getRiskColor(homeData.risk_score)}`}>
                 {getRiskLabel(homeData.risk_score)} ({homeData.risk_score?.toFixed(0) || 'N/A'})
               </span>
-              {homeData.weekly_change !== undefined && (
+              {homeData.weekly_change != null && (
                 <span className={`text-xs ${getTrendColor(homeData.risk_trend)}`}>
                   {getTrendIcon(homeData.risk_trend)} {homeData.weekly_change > 0 ? '+' : ''}{homeData.weekly_change?.toFixed(0)}%
                 </span>
