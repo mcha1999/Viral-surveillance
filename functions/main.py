@@ -215,7 +215,8 @@ def ingest_apac_sources(request) -> Dict[str, Any]:
     Cloud Function to ingest Asia-Pacific and Americas wastewater data.
 
     Triggered by Cloud Scheduler: 0 2 * * 2,5 (Tue/Fri 2am UTC)
-    Sources: Japan NIID, Australia Health, Canada PHAC, New Zealand ESR
+    Sources: Japan NIID, Australia Health, Canada PHAC, New Zealand ESR,
+             Singapore NEA, South Korea KDCA, Brazil Fiocruz
     """
     logger.info("Starting APAC/Americas sources ingestion")
 
@@ -228,6 +229,9 @@ def ingest_apac_sources(request) -> Dict[str, Any]:
         AUHealthAdapter,
         CanadaWastewaterAdapter,
         NewZealandESRAdapter,
+        SingaporeNEAAdapter,
+        SouthKoreaKDCAAdapter,
+        BrazilFiocruzAdapter,
     )
 
     adapters = [
@@ -235,6 +239,9 @@ def ingest_apac_sources(request) -> Dict[str, Any]:
         ("AU_HEALTH", AUHealthAdapter),
         ("CA_PHAC", CanadaWastewaterAdapter),
         ("NZ_ESR", NewZealandESRAdapter),
+        ("SG_NEA", SingaporeNEAAdapter),
+        ("KR_KDCA", SouthKoreaKDCAAdapter),
+        ("BR_FIOCRUZ", BrazilFiocruzAdapter),
     ]
 
     async def fetch_all():
@@ -466,9 +473,12 @@ def data_quality_check(request) -> Dict[str, Any]:
             # APAC
             "NIID",
             "AU_HEALTH",
+            "SG_NEA",
+            "KR_KDCA",
             # Americas
             "CA_PHAC",
             "NZ_ESR",
+            "BR_FIOCRUZ",
             # Genomic
             "NEXTSTRAIN",
             # Flight

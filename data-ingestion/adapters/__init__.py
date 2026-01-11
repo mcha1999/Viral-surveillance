@@ -33,6 +33,15 @@ from .eu_wastewater import (
     NewZealandESRAdapter,
 )
 
+# Wastewater adapters - APAC (new)
+from .apac_wastewater import (
+    SingaporeNEAAdapter,
+    SouthKoreaKDCAAdapter,
+)
+
+# Wastewater adapters - South America (new)
+from .brazil_wastewater import BrazilFiocruzAdapter
+
 # Genomic data adapter (new)
 from .nextstrain import NextstrainAdapter
 
@@ -54,11 +63,16 @@ WASTEWATER_ADAPTERS = {
     "FR_DATAGOUV": FRDataGouvAdapter,
     "NIID": JPNIIDAdapter,
     "AU_HEALTH": AUHealthAdapter,
-    # New EU/International adapters
+    # EU/International adapters
     "EU_OBSERVATORY": EUWastewaterObservatoryAdapter,
     "ES_ISCIII": SpainISCIIIAdapter,
     "CA_PHAC": CanadaWastewaterAdapter,
     "NZ_ESR": NewZealandESRAdapter,
+    # APAC adapters
+    "SG_NEA": SingaporeNEAAdapter,
+    "KR_KDCA": SouthKoreaKDCAAdapter,
+    # South America adapters
+    "BR_FIOCRUZ": BrazilFiocruzAdapter,
 }
 
 # Registry of genomic adapters
@@ -202,6 +216,11 @@ __all__ = [
     "SpainISCIIIAdapter",
     "CanadaWastewaterAdapter",
     "NewZealandESRAdapter",
+    # Wastewater adapters - APAC
+    "SingaporeNEAAdapter",
+    "SouthKoreaKDCAAdapter",
+    # Wastewater adapters - South America
+    "BrazilFiocruzAdapter",
     # Genomic adapters
     "NextstrainAdapter",
     # Flight adapter
