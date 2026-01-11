@@ -3,5 +3,17 @@ functions-framework==3.*
 google-cloud-storage==2.*
 google-cloud-pubsub==2.*
 google-cloud-secret-manager==2.*
+
+# HTTP clients
 httpx==0.25.*
+aiohttp==3.*
+
+# Database
+asyncpg==0.29.*
+
+# Data processing
 h3==3.7.*
+structlog==24.*
+
+# Data source clients
+sodapy==2.*
