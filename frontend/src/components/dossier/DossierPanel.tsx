@@ -2,11 +2,14 @@
 
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { getLocation, getRiskForecast } from '@/lib/api';
+import { getLocation, getRiskForecast, getRiskScore } from '@/lib/api';
 import { useLocationStore, useOnboardingStore } from '@/lib/store';
 import { RiskBadge } from './RiskBadge';
 import { TrendIndicator } from './TrendIndicator';
 import { IncomingThreats } from './IncomingThreats';
+import { RiskScoreBreakdown } from './RiskScoreBreakdown';
+import { ForecastPanel } from './ForecastPanel';
+import { EvidenceChain } from './EvidenceChain';
 import { DataFreshness } from '@/components/ui/DataFreshness';
 import { ContextualTooltip } from '@/components/onboarding/ContextualTooltip';
 
@@ -15,7 +18,7 @@ interface DossierPanelProps {
 }
 
 export function DossierPanel({ locationId }: DossierPanelProps) {
-  const { setSelectedLocation, watchlist, addToWatchlist, removeFromWatchlist } = useLocationStore();
+  const { setSelectedLocation, watchlist, addToWatchlist, removeFromWatchlist, audienceMode } = useLocationStore();
   const {
     hasSeenDossierTooltip,
     setHasSeenDossierTooltip,
@@ -61,6 +64,14 @@ export function DossierPanel({ locationId }: DossierPanelProps) {
     queryKey: ['forecast', locationId],
     queryFn: () => getRiskForecast(locationId, 7),
     staleTime: 15 * 60 * 1000,
+    enabled: !!location,
+  });
+
+  // Fetch risk score with component breakdown
+  const { data: riskScore } = useQuery({
+    queryKey: ['riskScore', locationId],
+    queryFn: () => getRiskScore(locationId),
+    staleTime: 5 * 60 * 1000,
     enabled: !!location,
   });
 
@@ -167,6 +178,17 @@ export function DossierPanel({ locationId }: DossierPanelProps) {
           </div>
         </div>
 
+        {/* Risk score breakdown - progressive disclosure */}
+        {riskScore && (
+          <RiskScoreBreakdown
+            riskScore={riskScore.risk_score}
+            components={riskScore.components}
+            confidence={riskScore.confidence}
+            lastUpdated={riskScore.last_updated}
+            audienceMode={audienceMode}
+          />
+        )}
+
         {/* Variants */}
         {location.variants.length > 0 && (
           <div>
@@ -191,35 +213,18 @@ export function DossierPanel({ locationId }: DossierPanelProps) {
           <IncomingThreats threats={location.incoming_threats} />
         )}
 
-        {/* Forecast preview */}
+        {/* Early detection evidence chain */}
+        <EvidenceChain locationId={locationId} />
+
+        {/* Forecast with visualization */}
         {forecast && (
-          <div>
-            <h3 className="text-sm font-semibold text-dark-muted uppercase mb-2">
-              7-Day Forecast
-            </h3>
-            <div className="bg-dark-surface rounded-lg p-3">
-              <div className="flex items-center justify-between">
-                <span className="text-dark-muted">Trend:</span>
-                <span className={`capitalize ${
-                  forecast.trend === 'rising' ? 'text-red-400' :
-                  forecast.trend === 'falling' ? 'text-green-400' :
-                  'text-yellow-400'
-                }`}>
-                  {forecast.trend}
-                </span>
-              </div>
-              {forecast.forecast.length > 0 && (
-                <div className="mt-2 text-sm">
-                  <span className="text-dark-muted">
-                    Projected ({forecast.forecast[forecast.forecast.length - 1].date}):
-                  </span>{' '}
-                  <span className="font-semibold">
-                    {forecast.forecast[forecast.forecast.length - 1].risk_score.toFixed(0)}
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
+          <ForecastPanel
+            locationId={locationId}
+            currentScore={forecast.current_score}
+            forecast={forecast.forecast}
+            trend={forecast.trend}
+            audienceMode={audienceMode}
+          />
         )}
 
         {/* Actions */}

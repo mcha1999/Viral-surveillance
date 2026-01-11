@@ -20,6 +20,14 @@ interface LocationState {
   // View preferences
   showFlightArcs: boolean;
   setShowFlightArcs: (show: boolean) => void;
+
+  // Audience mode for progressive disclosure
+  audienceMode: 'general' | 'expert';
+  setAudienceMode: (mode: 'general' | 'expert') => void;
+
+  // Time navigation settings
+  historyDays: 30 | 90 | 180 | 365;
+  setHistoryDays: (days: 30 | 90 | 180 | 365) => void;
 }
 
 export const useLocationStore = create<LocationState>()(
@@ -54,6 +62,14 @@ export const useLocationStore = create<LocationState>()(
       // View preferences
       showFlightArcs: false, // Off by default for cleaner UX
       setShowFlightArcs: (show) => set({ showFlightArcs: show }),
+
+      // Audience mode for progressive disclosure
+      audienceMode: 'general',
+      setAudienceMode: (mode) => set({ audienceMode: mode }),
+
+      // Time navigation settings
+      historyDays: 30,
+      setHistoryDays: (days) => set({ historyDays: days }),
     }),
     {
       name: 'viral-weather-storage',
@@ -61,6 +77,8 @@ export const useLocationStore = create<LocationState>()(
         watchlist: state.watchlist,
         homeLocation: state.homeLocation,
         showFlightArcs: state.showFlightArcs,
+        audienceMode: state.audienceMode,
+        historyDays: state.historyDays,
       }),
     }
   )

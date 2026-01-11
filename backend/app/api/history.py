@@ -49,6 +49,37 @@ class TimeSeriesResponse(BaseModel):
     end_date: str
 
 
+class VariantWave(BaseModel):
+    """Represents a period where a variant was dominant or highly prevalent."""
+    variant_id: str
+    display_name: str
+    color: str
+    start_date: str
+    peak_date: str
+    end_date: Optional[str] = None
+    peak_percentage: float
+    is_active: bool = True
+
+
+class VariantWavesResponse(BaseModel):
+    waves: List[VariantWave]
+    date_range: dict
+    location_id: Optional[str] = None
+
+
+class VariantCompositionPoint(BaseModel):
+    """Variant composition at a specific date."""
+    date: str
+    variants: dict  # variant_id -> percentage
+
+
+class VariantCompositionResponse(BaseModel):
+    location_id: str
+    series: List[VariantCompositionPoint]
+    variants: List[str]  # All variants present in the series
+    date_range: dict
+
+
 # Sample variants for synthetic data
 VARIANTS = [
     "BA.2.86",
@@ -562,3 +593,181 @@ async def get_historical_summary(
         "trend": trend,
         "variants_observed": row.variants if row.variants else [],
     }
+
+
+# Variant colors for visualization
+VARIANT_COLORS = {
+    "BA.2.86": "#8b5cf6",  # purple
+    "JN.1": "#ef4444",     # red
+    "JN.1.1": "#f97316",   # orange
+    "XBB.1.5": "#22c55e",  # green
+    "EG.5": "#3b82f6",     # blue
+    "HV.1": "#06b6d4",     # cyan
+    "JD.1.1": "#eab308",   # yellow
+}
+
+
+def generate_variant_waves(
+    start_date: date,
+    end_date: date,
+    location_id: Optional[str] = None,
+) -> List[VariantWave]:
+    """Generate synthetic variant wave data showing dominance periods."""
+    waves = []
+    total_days = (end_date - start_date).days
+
+    # Seed for consistency
+    seed_str = location_id or "global"
+    seed = int(hashlib.md5(seed_str.encode()).hexdigest()[:8], 16)
+    random.seed(seed)
+
+    # Generate overlapping waves for major variants
+    wave_variants = ["XBB.1.5", "EG.5", "BA.2.86", "JN.1", "JN.1.1"]
+
+    for i, variant in enumerate(wave_variants):
+        # Each wave spans a portion of the date range with some overlap
+        wave_start_offset = int(total_days * (i / len(wave_variants)) * 0.8)
+        wave_duration = int(total_days * 0.4) + random.randint(-10, 20)
+        peak_offset = wave_start_offset + wave_duration // 2 + random.randint(-5, 5)
+
+        wave_start = start_date + timedelta(days=wave_start_offset)
+        wave_peak = start_date + timedelta(days=min(peak_offset, total_days - 1))
+
+        # Determine if wave has ended
+        wave_end_offset = wave_start_offset + wave_duration
+        if wave_end_offset < total_days:
+            wave_end = start_date + timedelta(days=wave_end_offset)
+            is_active = False
+        else:
+            wave_end = None
+            is_active = True
+
+        waves.append(VariantWave(
+            variant_id=variant,
+            display_name=variant,
+            color=VARIANT_COLORS.get(variant, "#888888"),
+            start_date=wave_start.isoformat(),
+            peak_date=wave_peak.isoformat(),
+            end_date=wave_end.isoformat() if wave_end else None,
+            peak_percentage=random.uniform(30, 70),
+            is_active=is_active,
+        ))
+
+    random.seed()  # Reset seed
+    return waves
+
+
+def generate_variant_composition(
+    location_id: str,
+    start_date: date,
+    end_date: date,
+    granularity: str = "daily",
+) -> List[VariantCompositionPoint]:
+    """Generate synthetic variant composition data over time."""
+    seed = int(hashlib.md5(location_id.encode()).hexdigest()[:8], 16)
+    random.seed(seed)
+
+    date_step = timedelta(days=7) if granularity == "weekly" else timedelta(days=1)
+    total_days = (end_date - start_date).days
+
+    # Initialize variant prevalence with smooth transitions
+    variant_list = ["XBB.1.5", "EG.5", "BA.2.86", "JN.1", "JN.1.1"]
+
+    composition_series = []
+    current_date = start_date
+
+    while current_date <= end_date:
+        day_offset = (current_date - start_date).days
+        progress = day_offset / max(total_days, 1)
+
+        # Create smooth wave-like transitions between variants
+        composition = {}
+        total = 0
+
+        for i, variant in enumerate(variant_list):
+            # Each variant has a wave centered at different points in time
+            wave_center = i / len(variant_list)
+            wave_width = 0.3
+
+            # Gaussian-like wave
+            distance = abs(progress - wave_center)
+            if distance < wave_width * 2:
+                base_value = max(0, 50 * (1 - (distance / wave_width) ** 2))
+            else:
+                base_value = 0
+
+            # Add some noise
+            value = max(0, base_value + random.gauss(0, 5))
+            composition[variant] = value
+            total += value
+
+        # Normalize to 100%
+        if total > 0:
+            for variant in composition:
+                composition[variant] = round(composition[variant] / total * 100, 1)
+
+        composition_series.append(VariantCompositionPoint(
+            date=current_date.isoformat(),
+            variants=composition,
+        ))
+
+        current_date += date_step
+
+    random.seed()  # Reset seed
+    return composition_series
+
+
+@router.get("/variant-waves", response_model=VariantWavesResponse)
+async def get_variant_waves(
+    location_id: Optional[str] = Query(None, description="Location ID (optional, defaults to global)"),
+    days: int = Query(90, ge=30, le=365, description="Number of days of history"),
+):
+    """
+    Get variant wave periods showing when each variant was dominant.
+
+    Returns chronological list of variant waves with start, peak, and end dates.
+    Useful for timeline visualization of variant succession.
+    """
+    end_date = date.today()
+    start_date = end_date - timedelta(days=days)
+
+    waves = generate_variant_waves(start_date, end_date, location_id)
+
+    return VariantWavesResponse(
+        waves=waves,
+        date_range={"start": start_date.isoformat(), "end": end_date.isoformat()},
+        location_id=location_id,
+    )
+
+
+@router.get("/variant-composition/{location_id}", response_model=VariantCompositionResponse)
+async def get_variant_composition(
+    location_id: str,
+    days: int = Query(90, ge=30, le=365, description="Number of days of history"),
+    granularity: str = Query("weekly", description="Data granularity: daily or weekly"),
+):
+    """
+    Get time series of variant composition percentages for a location.
+
+    Returns variant percentages over time, suitable for stacked area charts.
+    Each point shows what percentage of detected variants each strain represents.
+    """
+    if granularity not in ["daily", "weekly"]:
+        raise HTTPException(status_code=400, detail="granularity must be 'daily' or 'weekly'")
+
+    end_date = date.today()
+    start_date = end_date - timedelta(days=days)
+
+    series = generate_variant_composition(location_id, start_date, end_date, granularity)
+
+    # Collect all variants present
+    all_variants = set()
+    for point in series:
+        all_variants.update(point.variants.keys())
+
+    return VariantCompositionResponse(
+        location_id=location_id,
+        series=series,
+        variants=sorted(list(all_variants)),
+        date_range={"start": start_date.isoformat(), "end": end_date.isoformat()},
+    )
