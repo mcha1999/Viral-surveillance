@@ -11,7 +11,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api import locations, risk, search, health, flights, history
+from app.api import locations, risk, search, health, flights, history, status
 from app.core.config import settings
 from app.core.database import init_db, close_db
 from app.core.cache import init_cache, close_cache
@@ -98,6 +98,7 @@ app.include_router(risk.router, prefix="/api/risk", tags=["Risk"])
 app.include_router(search.router, prefix="/api/search", tags=["Search"])
 app.include_router(flights.router, tags=["Flights"])
 app.include_router(history.router, tags=["History"])
+app.include_router(status.router, tags=["Status"])
 
 
 # Root endpoint
