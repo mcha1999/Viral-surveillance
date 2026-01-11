@@ -1,0 +1,4 @@
+# Ignore generated validation data files
+# These are created by running the analysis scripts
+*.csv
+*.json
