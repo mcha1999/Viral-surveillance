@@ -6,11 +6,16 @@ Provides flight route data for visualization and import pressure calculation.
 
 from datetime import datetime, date, timedelta
 from typing import Optional, List
-import random
 import hashlib
+import random
+import logging
 
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter, Query, HTTPException, Depends
 from pydantic import BaseModel
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.database import get_db
 
 router = APIRouter(prefix="/api/flights", tags=["flights"])
 
@@ -176,6 +181,7 @@ async def get_flight_arcs(
     min_pax: int = Query(0, description="Minimum passengers to include"),
     origin_country: Optional[str] = Query(None, description="Filter by origin country code"),
     dest_country: Optional[str] = Query(None, description="Filter by destination country code"),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Get flight arcs for visualization.
@@ -191,14 +197,82 @@ async def get_flight_arcs(
     else:
         target_date = date.today()
 
-    # For MVP, generate synthetic data
-    # In production, this would query the database populated by AviationStack adapter
-    arcs = generate_synthetic_arcs(
-        target_date=target_date,
-        min_passengers=min_pax,
-        origin_country=origin_country,
-        dest_country=dest_country,
-    )
+    # Query real flight data from database
+    query = """
+        SELECT
+            va.arc_id,
+            ol.latitude as origin_lat,
+            ol.longitude as origin_lon,
+            ol.name as origin_name,
+            ol.country as origin_country,
+            dl.latitude as dest_lat,
+            dl.longitude as dest_lon,
+            dl.name as dest_name,
+            dl.country as dest_country,
+            va.passenger_volume as pax_estimate,
+            va.flight_count,
+            COALESCE(rs.risk_score, 50) as origin_risk
+        FROM vector_arcs va
+        JOIN location_nodes ol ON va.origin_location_id = ol.location_id
+        JOIN location_nodes dl ON va.dest_location_id = dl.location_id
+        LEFT JOIN risk_scores rs ON va.origin_location_id = rs.location_id
+        WHERE va.date >= :start_date AND va.date <= :end_date
+          AND va.passenger_volume >= :min_pax
+    """
+
+    params = {
+        "start_date": target_date - timedelta(days=1),
+        "end_date": target_date,
+        "min_pax": min_pax,
+    }
+
+    if origin_country:
+        query += " AND ol.iso_code = :origin_country"
+        params["origin_country"] = origin_country
+
+    if dest_country:
+        query += " AND dl.iso_code = :dest_country"
+        params["dest_country"] = dest_country
+
+    query += " ORDER BY va.passenger_volume DESC LIMIT 500"
+
+    result = await db.execute(text(query), params)
+    rows = result.fetchall()
+
+    # If no real data, fall back to synthetic with warning
+    if not rows:
+        # Log warning that we're using synthetic data
+        import logging
+        logging.warning(f"No flight data in database for {target_date}, using synthetic fallback")
+        arcs = generate_synthetic_arcs(
+            target_date=target_date,
+            min_passengers=min_pax,
+            origin_country=origin_country,
+            dest_country=dest_country,
+        )
+        return FlightArcsResponse(
+            arcs=arcs,
+            total=len(arcs),
+            date=target_date.isoformat(),
+        )
+
+    arcs = [
+        FlightArc(
+            arc_id=row.arc_id,
+            origin_lat=float(row.origin_lat),
+            origin_lon=float(row.origin_lon),
+            origin_name=row.origin_name,
+            origin_country=row.origin_country,
+            dest_lat=float(row.dest_lat),
+            dest_lon=float(row.dest_lon),
+            dest_name=row.dest_name,
+            dest_country=row.dest_country,
+            pax_estimate=row.pax_estimate,
+            flight_count=row.flight_count,
+            origin_risk=float(row.origin_risk) if row.origin_risk else None,
+        )
+        for row in rows
+    ]
 
     return FlightArcsResponse(
         arcs=arcs,
@@ -208,65 +282,108 @@ async def get_flight_arcs(
 
 
 @router.get("/import-pressure/{location_id}", response_model=ImportPressureResponse)
-async def get_import_pressure(location_id: str):
+async def get_import_pressure(
+    location_id: str,
+    db: AsyncSession = Depends(get_db),
+):
     """
     Calculate import pressure for a location.
 
     Import pressure is based on incoming flight volume weighted by
     origin location risk scores.
     """
-    # Extract country from location_id (e.g., loc_us_new_york -> US)
-    parts = location_id.split("_")
-    if len(parts) < 2:
-        raise HTTPException(status_code=400, detail="Invalid location_id format")
+    # Query incoming flights to this location from database
+    query = """
+        SELECT
+            ol.name as origin_name,
+            ol.country as origin_country,
+            ol.iso_code as origin_iso,
+            SUM(va.passenger_volume) as passengers,
+            COALESCE(AVG(rs.risk_score), 50) as origin_risk
+        FROM vector_arcs va
+        JOIN location_nodes ol ON va.origin_location_id = ol.location_id
+        LEFT JOIN risk_scores rs ON va.origin_location_id = rs.location_id
+        WHERE va.dest_location_id = :location_id
+          AND va.date >= CURRENT_DATE - INTERVAL '7 days'
+        GROUP BY ol.name, ol.country, ol.iso_code
+        ORDER BY SUM(va.passenger_volume) DESC
+        LIMIT 20
+    """
 
-    country_code = parts[1].upper()
+    result = await db.execute(text(query), {"location_id": location_id})
+    rows = result.fetchall()
 
-    # Find nearest airport hub for this location
-    target_hub = None
-    for code, info in AIRPORT_HUBS.items():
-        if info["country"] == country_code:
-            target_hub = (code, info)
-            break
+    # If no real data, fall back to synthetic with warning
+    if not rows:
+        logging.warning(f"No flight data for {location_id}, using synthetic fallback")
 
-    if not target_hub:
-        # Default to a major hub
-        target_hub = ("JFK", AIRPORT_HUBS["JFK"])
+        # Extract country from location_id for synthetic fallback
+        parts = location_id.split("_")
+        country_code = parts[1].upper() if len(parts) >= 2 else "US"
 
-    # Generate incoming routes to this hub
-    arcs = generate_synthetic_arcs(
-        target_date=date.today(),
-        dest_country=target_hub[1]["country"],
-    )
+        target_hub = None
+        for code, info in AIRPORT_HUBS.items():
+            if info["country"] == country_code:
+                target_hub = (code, info)
+                break
 
-    # Calculate import pressure from routes to this hub
+        if not target_hub:
+            target_hub = ("JFK", AIRPORT_HUBS["JFK"])
+
+        arcs = generate_synthetic_arcs(
+            target_date=date.today(),
+            dest_country=target_hub[1]["country"],
+        )
+
+        sources = []
+        total_pressure = 0.0
+        for arc in arcs:
+            if arc.dest_country == target_hub[1]["country"]:
+                risk_contribution = (arc.pax_estimate * (arc.origin_risk or 50)) / 10000
+                total_pressure += risk_contribution
+                sources.append(ImportPressureSource(
+                    origin_name=arc.origin_name,
+                    origin_country=arc.origin_country,
+                    passengers=arc.pax_estimate,
+                    risk_contribution=risk_contribution,
+                ))
+
+        import_pressure = min(100, total_pressure / max(1, len(sources)) * 2)
+        sources.sort(key=lambda x: x.risk_contribution, reverse=True)
+
+        return ImportPressureResponse(
+            location_id=location_id,
+            import_pressure=import_pressure,
+            top_sources=sources[:10],
+            timestamp=datetime.utcnow().isoformat() + "Z",
+        )
+
+    # Calculate from real data
     total_pressure = 0.0
     total_passengers = 0
     sources: List[ImportPressureSource] = []
 
-    for arc in arcs:
-        if arc.dest_country == target_hub[1]["country"]:
-            risk_contribution = (arc.pax_estimate * (arc.origin_risk or 50)) / 10000
-            total_pressure += risk_contribution
-            total_passengers += arc.pax_estimate
+    for row in rows:
+        passengers = int(row.passengers)
+        origin_risk = float(row.origin_risk)
+        risk_contribution = (passengers * origin_risk) / 10000
 
-            sources.append(ImportPressureSource(
-                origin_name=arc.origin_name,
-                origin_country=arc.origin_country,
-                passengers=arc.pax_estimate,
-                risk_contribution=risk_contribution,
-            ))
+        total_pressure += risk_contribution
+        total_passengers += passengers
+
+        sources.append(ImportPressureSource(
+            origin_name=row.origin_name,
+            origin_country=row.origin_country,
+            passengers=passengers,
+            risk_contribution=round(risk_contribution, 2),
+        ))
 
     # Normalize to 0-100 scale
     import_pressure = min(100, total_pressure / max(1, len(sources)) * 2)
 
-    # Sort by risk contribution and take top 10
-    sources.sort(key=lambda x: x.risk_contribution, reverse=True)
-    top_sources = sources[:10]
-
     return ImportPressureResponse(
         location_id=location_id,
-        import_pressure=import_pressure,
-        top_sources=top_sources,
+        import_pressure=round(import_pressure, 1),
+        top_sources=sources[:10],
         timestamp=datetime.utcnow().isoformat() + "Z",
     )

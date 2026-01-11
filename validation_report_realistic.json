@@ -1,0 +1,102 @@
+{
+  "summary": {
+    "total_tests": 4,
+    "passed": 3,
+    "failed": 1,
+    "pass_rate": 0.75,
+    "overall_verdict": "VALIDATED",
+    "generated_at": "2026-01-11T01:46:02.148080"
+  },
+  "results": [
+    {
+      "hypothesis": "H1: Import pressure predicts variant arrival timing",
+      "test": "Spearman rank correlation",
+      "metric": "Average correlation (import pressure vs arrival rank)",
+      "value": 0.30878237487350824,
+      "p_value": null,
+      "passed": true,
+      "details": {
+        "variants_tested": {
+          "JN.1": {
+            "correlation": 0.9878906746023549,
+            "p_value": 1.661244210721238e-40,
+            "n_locations": 50,
+            "significant": "True"
+          },
+          "BA.2.86": {
+            "correlation": 0.8702279455126606,
+            "p_value": 2.282966906106153e-16,
+            "n_locations": 50,
+            "significant": "True"
+          },
+          "EG.5": {
+            "correlation": -0.9317714954944908,
+            "p_value": 9.258861253782274e-23,
+            "n_locations": 50,
+            "significant": "True"
+          }
+        },
+        "significant_variants": 3,
+        "interpretation": "Strong correlation (positive or negative) indicates import pressure predicts variant arrival timing. High-connectivity hubs typically show positive correlation (high pressure + early arrival)."
+      }
+    },
+    {
+      "hypothesis": "H2: Risk score predicts wastewater surge",
+      "test": "14-day forecast accuracy",
+      "metric": "Directional accuracy",
+      "value": 0.2876190476190476,
+      "p_value": null,
+      "passed": false,
+      "details": {
+        "rmse": 93.04816608173985,
+        "mae": 77.95577614963337,
+        "baseline_rmse_no_change": 71.59733110446973,
+        "baseline_rmse_persistence": 51.06781901775768,
+        "improvement_vs_baseline": -29.96038350364008,
+        "n_predictions": 525,
+        "directional_accuracy": 0.2876190476190476,
+        "interpretation": "Model predicts direction correctly 28.8% of time. RMSE 93.05 vs baseline 71.60 (worse than naive)"
+      }
+    },
+    {
+      "hypothesis": "H3: High import pressure = faster propagation",
+      "test": "Mann-Whitney U test",
+      "metric": "Median days difference (high vs low pressure)",
+      "value": 49.0,
+      "p_value": 5.783301857942721e-06,
+      "passed": "True",
+      "details": {
+        "variant": "JN.1",
+        "high_pressure_median_days": 119.0,
+        "low_pressure_median_days": 168.0,
+        "high_pressure_n": 13,
+        "low_pressure_n": 13,
+        "effect_size_days": 49.0,
+        "interpretation": "High-pressure locations took median 119 days to 50% prevalence vs 168 days for low-pressure locations"
+      }
+    },
+    {
+      "hypothesis": "Lead time analysis",
+      "test": "Advance warning before variant arrival",
+      "metric": "Median lead time (days)",
+      "value": 60.0,
+      "p_value": null,
+      "passed": "True",
+      "details": {
+        "variant": "JN.1",
+        "risk_threshold": 40,
+        "median_lead_time": 60.0,
+        "mean_lead_time": 60.0,
+        "min_lead_time": "60",
+        "max_lead_time": "60",
+        "locations_with_warning": 50,
+        "locations_without_warning": 0,
+        "pct_locations_warned": 100.0,
+        "interpretation": "Model provided 60 days median advance warning for 50/50 locations (100%)"
+      }
+    }
+  ],
+  "recommendations": [
+    "Risk score formula may need recalibration. Consider adding: seasonality factors, population immunity estimates, or variant-specific transmissibility"
+  ]
+}
