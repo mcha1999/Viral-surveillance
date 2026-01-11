@@ -35,8 +35,11 @@ class CDCNWSSAdapter(BaseAdapter):
     signal_type = SignalType.WASTEWATER
 
     # Socrata API details
+    # Updated January 2026: Dataset ID changed from g653-rqe2 to 2ew6-ywp6
+    # See: https://data.cdc.gov/Public-Health-Surveillance/NWSS-Public-SARS-CoV-2-Wastewater-Metric-Data/2ew6-ywp6
     DOMAIN = "data.cdc.gov"
-    DATASET_ID = "g653-rqe2"
+    DATASET_ID = "2ew6-ywp6"  # Current dataset (previously g653-rqe2)
+    LEGACY_DATASET_ID = "g653-rqe2"  # Fallback if new endpoint fails
 
     # Historical max for normalization (copies/L)
     # This should be calibrated based on actual data
