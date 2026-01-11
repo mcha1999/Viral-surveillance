@@ -131,7 +131,8 @@ def ingest_european_sources(request) -> Dict[str, Any]:
     Cloud Function to ingest European wastewater data.
 
     Triggered by Cloud Scheduler: 0 8 * * 1,3,5 (MWF 8am UTC)
-    Sources: UK UKHSA, Netherlands RIVM, Germany RKI, France data.gouv
+    Sources: UK UKHSA, Netherlands RIVM, Germany RKI, France data.gouv,
+             EU Wastewater Observatory, Spain ISCIII
     """
     logger.info("Starting European sources ingestion")
 
@@ -147,6 +148,8 @@ def ingest_european_sources(request) -> Dict[str, Any]:
         NLRIVMAdapter,
         DERKIAdapter,
         FRDataGouvAdapter,
+        EUWastewaterObservatoryAdapter,
+        SpainISCIIIAdapter,
     )
 
     adapters = [
@@ -154,6 +157,8 @@ def ingest_european_sources(request) -> Dict[str, Any]:
         ("RIVM", NLRIVMAdapter),
         ("RKI", DERKIAdapter),
         ("FR_DATAGOUV", FRDataGouvAdapter),
+        ("EU_OBSERVATORY", EUWastewaterObservatoryAdapter),
+        ("ES_ISCIII", SpainISCIIIAdapter),
     ]
 
     async def fetch_all():
@@ -207,22 +212,36 @@ def ingest_european_sources(request) -> Dict[str, Any]:
 @functions_framework.http
 def ingest_apac_sources(request) -> Dict[str, Any]:
     """
-    Cloud Function to ingest Asia-Pacific wastewater data.
+    Cloud Function to ingest Asia-Pacific and Americas wastewater data.
 
     Triggered by Cloud Scheduler: 0 2 * * 2,5 (Tue/Fri 2am UTC)
-    Sources: Japan NIID, Australia Health
+    Sources: Japan NIID, Australia Health, Canada PHAC, New Zealand ESR,
+             Singapore NEA, South Korea KDCA, Brazil Fiocruz
     """
-    logger.info("Starting APAC sources ingestion")
+    logger.info("Starting APAC/Americas sources ingestion")
 
     # Import adapters
     import sys
     sys.path.insert(0, '/workspace/data-ingestion')
 
-    from adapters import JPNIIDAdapter, AUHealthAdapter
+    from adapters import (
+        JPNIIDAdapter,
+        AUHealthAdapter,
+        CanadaWastewaterAdapter,
+        NewZealandESRAdapter,
+        SingaporeNEAAdapter,
+        SouthKoreaKDCAAdapter,
+        BrazilFiocruzAdapter,
+    )
 
     adapters = [
         ("NIID", JPNIIDAdapter),
         ("AU_HEALTH", AUHealthAdapter),
+        ("CA_PHAC", CanadaWastewaterAdapter),
+        ("NZ_ESR", NewZealandESRAdapter),
+        ("SG_NEA", SingaporeNEAAdapter),
+        ("KR_KDCA", SouthKoreaKDCAAdapter),
+        ("BR_FIOCRUZ", BrazilFiocruzAdapter),
     ]
 
     async def fetch_all():
@@ -328,6 +347,72 @@ def ingest_flight_data(request) -> Dict[str, Any]:
 
 
 @functions_framework.http
+def ingest_genomic_data(request) -> Dict[str, Any]:
+    """
+    Cloud Function to ingest Nextstrain genomic data.
+
+    Triggered by Cloud Scheduler: 0 4 * * * (Daily at 4am UTC)
+    Source: Nextstrain (clade frequencies and variant tracking)
+    """
+    logger.info("Starting Nextstrain genomic data ingestion")
+
+    try:
+        # Import adapter
+        import sys
+        sys.path.insert(0, '/workspace/data-ingestion')
+        from adapters.nextstrain import NextstrainAdapter
+
+        async def fetch_data():
+            adapter = NextstrainAdapter()
+            raw_data = await adapter.fetch()
+            locations, events = adapter.normalize(raw_data)
+
+            # Get dominant variants
+            variants = await adapter.get_dominant_variants(top_n=10)
+
+            await adapter.close()
+            return raw_data, locations, events, variants
+
+        raw_data, locations, events, variants = asyncio.run(fetch_data())
+
+        # Save to GCS
+        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        raw_path = f"raw/nextstrain/{timestamp}.json"
+        save_to_gcs(raw_data, raw_path)
+
+        # Save variants separately for quick access
+        variants_path = f"normalized/variants/{timestamp}.json"
+        save_to_gcs(variants, variants_path)
+
+        # Publish completion event
+        publish_event("genomic_ingestion_complete", {
+            "source": "NEXTSTRAIN",
+            "records": len(raw_data),
+            "locations": len(locations),
+            "events": len(events),
+            "top_variants": variants[:5],
+            "raw_path": raw_path,
+        })
+
+        return {
+            "status": "success",
+            "source": "NEXTSTRAIN",
+            "records_fetched": len(raw_data),
+            "locations_normalized": len(locations),
+            "events_normalized": len(events),
+            "top_variants": [v["clade"] for v in variants[:5]],
+        }
+
+    except Exception as e:
+        logger.error(f"Nextstrain ingestion failed: {e}", exc_info=True)
+        publish_event("ingestion_failed", {
+            "source": "NEXTSTRAIN",
+            "error": str(e),
+        })
+        return {"status": "error", "error": str(e)}, 500
+
+
+@functions_framework.http
 def calculate_risk_scores(request) -> Dict[str, Any]:
     """
     Cloud Function to calculate/recalculate risk scores.
@@ -376,13 +461,28 @@ def data_quality_check(request) -> Dict[str, Any]:
     try:
         # Check data freshness for each source
         sources = [
+            # US
             "CDC_NWSS",
+            # Europe
             "UKHSA",
             "RIVM",
             "RKI",
             "FR_DATAGOUV",
+            "EU_OBSERVATORY",
+            "ES_ISCIII",
+            # APAC
             "NIID",
             "AU_HEALTH",
+            "SG_NEA",
+            "KR_KDCA",
+            # Americas
+            "CA_PHAC",
+            "NZ_ESR",
+            "BR_FIOCRUZ",
+            # Genomic
+            "NEXTSTRAIN",
+            # Flight
+            "AVIATIONSTACK",
         ]
 
         # In production, query database for latest timestamp per source

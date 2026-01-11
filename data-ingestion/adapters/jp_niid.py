@@ -115,9 +115,12 @@ class JPNIIDAdapter(BaseAdapter):
             return records
 
         except httpx.HTTPError as e:
-            self.logger.warning(f"Failed to fetch NIID data: {e}")
-            # Return synthetic data for demo
-            return self._generate_synthetic_data()
+            self.logger.error(
+                f"Failed to fetch NIID data: {e}. "
+                "Returning empty data - NOT using synthetic fallback."
+            )
+            # Return empty data instead of silently using synthetic data
+            return []
 
     def _generate_synthetic_data(self) -> List[Dict[str, Any]]:
         """Generate synthetic data when real source unavailable."""
