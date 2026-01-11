@@ -5,9 +5,12 @@ These functions are triggered by Cloud Scheduler to periodically
 fetch and process data from various sources AND persist to database.
 
 CRITICAL: These functions now write to PostgreSQL database, not just GCS.
+
+Deployment: Use scripts/deploy.sh which packages adapters with this file.
 """
 
 import os
+import sys
 import json
 import asyncio
 from datetime import datetime, timedelta
@@ -20,6 +23,19 @@ from google.cloud import storage, pubsub_v1, secretmanager
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Setup import path for adapters (works both locally and when deployed)
+# When deployed via deploy.sh, adapters are in the same directory
+# When running locally, they're in ../data-ingestion/
+_current_dir = os.path.dirname(os.path.abspath(__file__))
+_adapters_paths = [
+    _current_dir,  # Deployed: adapters are copied here
+    os.path.join(os.path.dirname(_current_dir), 'data-ingestion'),  # Local dev
+    '/workspace/data-ingestion',  # Cloud Functions workspace
+]
+for _path in _adapters_paths:
+    if os.path.exists(_path) and _path not in sys.path:
+        sys.path.insert(0, _path)
 
 # Project configuration
 PROJECT_ID = os.getenv("GCP_PROJECT_ID", "viral-weather")
@@ -98,8 +114,6 @@ async def persist_to_database(
         logger.warning(f"[{source_id}] No DATABASE_URL configured - data not persisted to database")
         return {"locations": 0, "events": 0}
 
-    import sys
-    sys.path.insert(0, '/workspace/data-ingestion')
     from persistence import DataPersister
 
     persister = DataPersister(database_url)
@@ -146,8 +160,6 @@ def ingest_cdc_nwss(request) -> Dict[str, Any]:
 
     try:
         # Import adapter (lazy import for cold start optimization)
-        import sys
-        sys.path.insert(0, '/workspace/data-ingestion')
         from adapters.cdc_nwss import CDCNWSSAdapter
 
         # Run async adapter
@@ -209,9 +221,6 @@ def ingest_european_sources(request) -> Dict[str, Any]:
     logger.info("Starting European sources ingestion")
 
     # Import adapters
-    import sys
-    sys.path.insert(0, '/workspace/data-ingestion')
-
     from adapters import (
         UKUKHSAAdapter,
         NLRIVMAdapter,
@@ -294,9 +303,6 @@ def ingest_apac_sources(request) -> Dict[str, Any]:
     logger.info("Starting APAC/Americas sources ingestion")
 
     # Import adapters
-    import sys
-    sys.path.insert(0, '/workspace/data-ingestion')
-
     from adapters import (
         JPNIIDAdapter,
         AUHealthAdapter,
@@ -388,8 +394,6 @@ def ingest_flight_data(request) -> Dict[str, Any]:
     }
 
     try:
-        import sys
-        sys.path.insert(0, '/workspace/data-ingestion')
         from adapters.aviationstack import AviationStackAdapter
         from adapters.opensky import OpenSkyAdapter
         from persistence import DataPersister
@@ -510,8 +514,6 @@ def ingest_genomic_data(request) -> Dict[str, Any]:
 
     try:
         # Import adapter
-        import sys
-        sys.path.insert(0, '/workspace/data-ingestion')
         from adapters.nextstrain import NextstrainAdapter
 
         async def fetch_and_persist():
@@ -581,8 +583,6 @@ def calculate_risk_scores(request) -> Dict[str, Any]:
     logger.info("Starting risk score calculation")
 
     try:
-        import sys
-        sys.path.insert(0, '/workspace/data-ingestion')
         from persistence import DataPersister
 
         database_url = get_database_url()
@@ -633,8 +633,6 @@ def data_quality_check(request) -> Dict[str, Any]:
     logger.info("Starting data quality check")
 
     try:
-        import sys
-        sys.path.insert(0, '/workspace/data-ingestion')
         from persistence import DataPersister
 
         database_url = get_database_url()
@@ -749,8 +747,6 @@ def process_ingestion_event(cloud_event):
 
         # Refresh materialized view
         try:
-            import sys
-            sys.path.insert(0, '/workspace/data-ingestion')
             from persistence import DataPersister
 
             database_url = get_database_url()
@@ -784,8 +780,6 @@ def ingest_all_sources(request) -> Dict[str, Any]:
     logger.info("Starting FULL data ingestion (all sources)")
 
     try:
-        import sys
-        sys.path.insert(0, '/workspace/data-ingestion')
         from ingest import ingest_all
         from persistence import DataPersister
 
