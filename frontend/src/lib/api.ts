@@ -174,6 +174,163 @@ export async function getImportPressure(locationId: string): Promise<{
   return fetchApi(`/api/flights/import-pressure/${locationId}`);
 }
 
+// Variant waves and composition
+export async function getVariantWaves(params?: {
+  locationId?: string;
+  days?: number;
+}): Promise<{
+  waves: Array<{
+    variant_id: string;
+    display_name: string;
+    color: string;
+    start_date: string;
+    peak_date: string;
+    end_date: string | null;
+    peak_percentage: number;
+    is_active: boolean;
+  }>;
+  date_range: { start: string; end: string };
+  location_id: string | null;
+}> {
+  const searchParams = new URLSearchParams();
+  if (params?.locationId) searchParams.set('location_id', params.locationId);
+  if (params?.days) searchParams.set('days', params.days.toString());
+
+  const query = searchParams.toString();
+  return fetchApi(`/api/history/variant-waves${query ? `?${query}` : ''}`);
+}
+
+export async function getVariantSpreadArcs(
+  variantId: string,
+  days: number = 30
+): Promise<{
+  variant_id: string;
+  arcs: Array<{
+    arc_id: string;
+    origin_lat: number;
+    origin_lon: number;
+    origin_name: string;
+    origin_country: string;
+    dest_lat: number;
+    dest_lon: number;
+    dest_name: string;
+    dest_country: string;
+    variant_id: string;
+    days_since_origin_detection: number;
+    pax_volume: number;
+    first_detection_date: string;
+    is_active: boolean;
+  }>;
+  date_range: { start: string; end: string };
+  total_arcs: number;
+}> {
+  return fetchApi(`/api/variants/spread-arcs/${variantId}?days=${days}`);
+}
+
+export async function getFirstDetections(
+  variantId: string,
+  days: number = 60
+): Promise<{
+  variant_id: string;
+  markers: Array<{
+    location_id: string;
+    location_name: string;
+    country: string;
+    lat: number;
+    lon: number;
+    variant_id: string;
+    detection_date: string;
+    detection_type: 'traveler' | 'local';
+    confidence: number;
+  }>;
+  earliest_detection: string;
+  total_locations: number;
+}> {
+  return fetchApi(`/api/variants/first-detections/${variantId}?days=${days}`);
+}
+
+export async function getEvidenceChain(
+  locationId: string,
+  variantId: string,
+  days: number = 60
+): Promise<{
+  location_id: string;
+  location_name: string;
+  variant_id: string;
+  events: Array<{
+    event_id: string;
+    event_type: string;
+    date: string;
+    variant_id: string;
+    description: string;
+    source_location?: string;
+    count?: number;
+    confidence: number;
+    icon: string;
+  }>;
+  lead_time_days: number | null;
+  chain_confidence: number;
+  summary: string;
+}> {
+  return fetchApi(`/api/evidence/chain/${locationId}/${variantId}?days=${days}`);
+}
+
+export async function getAllEvidenceChains(
+  locationId: string,
+  days: number = 60
+): Promise<{
+  location_id: string;
+  location_name: string;
+  chains: Array<{
+    location_id: string;
+    location_name: string;
+    variant_id: string;
+    events: Array<{
+      event_id: string;
+      event_type: string;
+      date: string;
+      variant_id: string;
+      description: string;
+      confidence: number;
+      icon: string;
+    }>;
+    lead_time_days: number | null;
+    chain_confidence: number;
+    summary: string;
+  }>;
+  total_chains: number;
+}> {
+  return fetchApi(`/api/evidence/chains/${locationId}?days=${days}`);
+}
+
+export async function listVariants(): Promise<{
+  variants: Array<{
+    id: string;
+    display_name: string;
+    is_active: boolean;
+  }>;
+}> {
+  return fetchApi('/api/variants/list');
+}
+
+export async function getVariantComposition(
+  locationId: string,
+  days: number = 90,
+  granularity: 'daily' | 'weekly' = 'weekly'
+): Promise<{
+  location_id: string;
+  series: Array<{
+    date: string;
+    variants: Record<string, number>;
+  }>;
+  variants: string[];
+  date_range: { start: string; end: string };
+}> {
+  return fetchApi(
+    `/api/history/variant-composition/${locationId}?days=${days}&granularity=${granularity}`
+  );
+}
+
 // Historical data
 export async function getHistoricalData(params: {
   startDate: string;
