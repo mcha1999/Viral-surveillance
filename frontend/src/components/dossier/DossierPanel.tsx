@@ -1,11 +1,14 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getLocation, getRiskForecast } from '@/lib/api';
-import { useLocationStore } from '@/lib/store';
+import { useLocationStore, useOnboardingStore } from '@/lib/store';
 import { RiskBadge } from './RiskBadge';
 import { TrendIndicator } from './TrendIndicator';
 import { IncomingThreats } from './IncomingThreats';
+import { DataFreshness } from '@/components/ui/DataFreshness';
+import { ContextualTooltip } from '@/components/onboarding/ContextualTooltip';
 
 interface DossierPanelProps {
   locationId: string;
@@ -13,6 +16,38 @@ interface DossierPanelProps {
 
 export function DossierPanel({ locationId }: DossierPanelProps) {
   const { setSelectedLocation, watchlist, addToWatchlist, removeFromWatchlist } = useLocationStore();
+  const {
+    hasSeenDossierTooltip,
+    setHasSeenDossierTooltip,
+    hasSeenWatchlistTooltip,
+    setHasSeenWatchlistTooltip,
+    locationsViewed,
+    incrementLocationsViewed,
+    markStepComplete,
+  } = useOnboardingStore();
+
+  const [showDossierTooltip, setShowDossierTooltip] = useState(false);
+  const [showWatchlistTooltip, setShowWatchlistTooltip] = useState(false);
+
+  // Track location views and show tooltips
+  useEffect(() => {
+    incrementLocationsViewed();
+    markStepComplete('explore_globe');
+
+    // Show dossier tooltip on first view
+    if (!hasSeenDossierTooltip) {
+      const timer = setTimeout(() => setShowDossierTooltip(true), 500);
+      return () => clearTimeout(timer);
+    }
+  }, []);
+
+  // Show watchlist tooltip after viewing 3 locations
+  useEffect(() => {
+    if (locationsViewed >= 3 && !hasSeenWatchlistTooltip && hasSeenDossierTooltip) {
+      const timer = setTimeout(() => setShowWatchlistTooltip(true), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [locationsViewed, hasSeenWatchlistTooltip, hasSeenDossierTooltip]);
 
   // Fetch location data
   const { data: location, isLoading, error } = useQuery({
@@ -58,8 +93,37 @@ export function DossierPanel({ locationId }: DossierPanelProps) {
     );
   }
 
+  const handleDismissDossierTooltip = () => {
+    setShowDossierTooltip(false);
+    setHasSeenDossierTooltip(true);
+  };
+
+  const handleDismissWatchlistTooltip = () => {
+    setShowWatchlistTooltip(false);
+    setHasSeenWatchlistTooltip(true);
+  };
+
+  const handleAddToWatchlist = () => {
+    if (!isInWatchlist) {
+      addToWatchlist(locationId);
+      markStepComplete('add_watchlist');
+    } else {
+      removeFromWatchlist(locationId);
+    }
+  };
+
   return (
-    <div className="dossier-panel">
+    <div className="dossier-panel animate-in slide-in-from-right duration-300">
+      {/* Dossier Tooltip */}
+      <ContextualTooltip
+        id="dossier-intro"
+        title="This is the Dossier Panel"
+        description="View detailed risk information, trends, and variants for any location. Explore the data to understand local viral activity."
+        position="left"
+        show={showDossierTooltip}
+        onDismiss={handleDismissDossierTooltip}
+      />
+
       {/* Header */}
       <div className="sticky top-0 bg-dark-surface/95 backdrop-blur-md border-b border-dark-border p-4 z-10">
         <div className="flex items-start justify-between">
@@ -159,9 +223,9 @@ export function DossierPanel({ locationId }: DossierPanelProps) {
         )}
 
         {/* Actions */}
-        <div className="flex gap-2">
+        <div className="flex gap-2 relative">
           <button
-            onClick={() => isInWatchlist ? removeFromWatchlist(locationId) : addToWatchlist(locationId)}
+            onClick={handleAddToWatchlist}
             className={`flex-1 py-2 px-4 rounded-lg font-medium transition-colors ${
               isInWatchlist
                 ? 'bg-blue-600 text-white hover:bg-blue-700'
@@ -170,14 +234,25 @@ export function DossierPanel({ locationId }: DossierPanelProps) {
           >
             {isInWatchlist ? '★ In Watchlist' : '☆ Add to Watchlist'}
           </button>
+
+          {/* Watchlist Tooltip */}
+          <ContextualTooltip
+            id="watchlist-intro"
+            title="Add to your Watchlist"
+            description="Track up to 5 locations and get notified when risk levels change significantly."
+            position="top"
+            show={showWatchlistTooltip}
+            onDismiss={handleDismissWatchlistTooltip}
+            showAction
+            actionLabel="Add now"
+            onAction={handleAddToWatchlist}
+          />
         </div>
 
-        {/* Last updated */}
-        {location.last_updated && (
-          <div className="text-xs text-dark-muted text-center">
-            Last updated: {new Date(location.last_updated).toLocaleString()}
-          </div>
-        )}
+        {/* Data freshness indicator */}
+        <div className="flex items-center justify-center">
+          <DataFreshness lastUpdated={location.last_updated} />
+        </div>
       </div>
     </div>
   );
