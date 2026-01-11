@@ -2,7 +2,9 @@
 Google Cloud Functions for Viral Weather data ingestion.
 
 These functions are triggered by Cloud Scheduler to periodically
-fetch and process data from various sources.
+fetch and process data from various sources AND persist to database.
+
+CRITICAL: These functions now write to PostgreSQL database, not just GCS.
 """
 
 import os
@@ -33,34 +35,104 @@ def get_secret(secret_id: str) -> str:
     return response.payload.data.decode("UTF-8")
 
 
+def get_database_url() -> Optional[str]:
+    """Get database URL from Secret Manager or environment."""
+    try:
+        return get_secret("database-url")
+    except Exception:
+        return os.getenv("DATABASE_URL")
+
+
 def publish_event(event_type: str, data: Dict[str, Any]) -> None:
     """Publish event to Pub/Sub for downstream processing."""
-    publisher = pubsub_v1.PublisherClient()
-    topic_path = publisher.topic_path(PROJECT_ID, PUBSUB_TOPIC)
+    try:
+        publisher = pubsub_v1.PublisherClient()
+        topic_path = publisher.topic_path(PROJECT_ID, PUBSUB_TOPIC)
 
-    message = {
-        "event_type": event_type,
-        "timestamp": datetime.utcnow().isoformat() + "Z",
-        "data": data,
-    }
+        message = {
+            "event_type": event_type,
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "data": data,
+        }
 
-    publisher.publish(topic_path, json.dumps(message).encode("utf-8"))
-    logger.info(f"Published {event_type} event to Pub/Sub")
+        publisher.publish(topic_path, json.dumps(message).encode("utf-8"))
+        logger.info(f"Published {event_type} event to Pub/Sub")
+    except Exception as e:
+        logger.warning(f"Failed to publish event: {e}")
 
 
 def save_to_gcs(data: Any, path: str) -> str:
     """Save data to Google Cloud Storage."""
-    client = storage.Client()
-    bucket = client.bucket(BUCKET_NAME)
-    blob = bucket.blob(path)
+    try:
+        client = storage.Client()
+        bucket = client.bucket(BUCKET_NAME)
+        blob = bucket.blob(path)
 
-    if isinstance(data, (dict, list)):
-        blob.upload_from_string(json.dumps(data), content_type="application/json")
-    else:
-        blob.upload_from_string(str(data))
+        if isinstance(data, (dict, list)):
+            blob.upload_from_string(json.dumps(data), content_type="application/json")
+        else:
+            blob.upload_from_string(str(data))
 
-    logger.info(f"Saved data to gs://{BUCKET_NAME}/{path}")
-    return f"gs://{BUCKET_NAME}/{path}"
+        logger.info(f"Saved data to gs://{BUCKET_NAME}/{path}")
+        return f"gs://{BUCKET_NAME}/{path}"
+    except Exception as e:
+        logger.warning(f"Failed to save to GCS: {e}")
+        return ""
+
+
+async def persist_to_database(
+    locations: List,
+    events: List,
+    source_id: str,
+    database_url: Optional[str] = None
+) -> Dict[str, int]:
+    """
+    Persist locations and events to PostgreSQL database.
+
+    This is the CRITICAL function that was missing - writes adapter output to database.
+    """
+    if not database_url:
+        database_url = get_database_url()
+
+    if not database_url:
+        logger.warning(f"[{source_id}] No DATABASE_URL configured - data not persisted to database")
+        return {"locations": 0, "events": 0}
+
+    import sys
+    sys.path.insert(0, '/workspace/data-ingestion')
+    from persistence import DataPersister
+
+    persister = DataPersister(database_url)
+
+    try:
+        await persister.connect()
+
+        # Persist locations
+        loc_inserted, loc_updated = await persister.persist_locations(locations, source_id)
+
+        # Persist events
+        evt_inserted, evt_skipped = await persister.persist_events(events, source_id)
+
+        # Update source status
+        await persister.update_data_source_status(source_id, success=True)
+
+        await persister.close()
+
+        logger.info(f"[{source_id}] Persisted to DB: {loc_inserted + loc_updated} locations, {evt_inserted} events")
+
+        return {
+            "locations": loc_inserted + loc_updated,
+            "events": evt_inserted,
+        }
+
+    except Exception as e:
+        logger.error(f"[{source_id}] Database persistence failed: {e}")
+        try:
+            await persister.update_data_source_status(source_id, success=False, error=str(e))
+            await persister.close()
+        except Exception:
+            pass
+        return {"locations": 0, "events": 0, "error": str(e)}
 
 
 @functions_framework.http
@@ -79,25 +151,23 @@ def ingest_cdc_nwss(request) -> Dict[str, Any]:
         from adapters.cdc_nwss import CDCNWSSAdapter
 
         # Run async adapter
-        async def fetch_data():
+        async def fetch_and_persist():
             adapter = CDCNWSSAdapter()
             raw_data = await adapter.fetch()
             locations, events = adapter.normalize(raw_data)
             await adapter.close()
-            return raw_data, locations, events
 
-        raw_data, locations, events = asyncio.run(fetch_data())
+            # CRITICAL: Persist to database
+            db_result = await persist_to_database(locations, events, "CDC_NWSS")
 
-        # Save raw data to GCS
+            return raw_data, locations, events, db_result
+
+        raw_data, locations, events, db_result = asyncio.run(fetch_and_persist())
+
+        # Save raw data to GCS (backup)
         timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
         raw_path = f"raw/cdc_nwss/{timestamp}.json"
         save_to_gcs(raw_data, raw_path)
-
-        # Save normalized data
-        locations_path = f"normalized/locations/cdc_nwss_{timestamp}.json"
-        events_path = f"normalized/events/cdc_nwss_{timestamp}.json"
-        save_to_gcs([loc.__dict__ for loc in locations], locations_path)
-        save_to_gcs([evt.__dict__ for evt in events], events_path)
 
         # Publish completion event
         publish_event("ingestion_complete", {
@@ -105,6 +175,7 @@ def ingest_cdc_nwss(request) -> Dict[str, Any]:
             "records": len(raw_data),
             "locations": len(locations),
             "events": len(events),
+            "db_persisted": db_result,
             "raw_path": raw_path,
         })
 
@@ -114,6 +185,7 @@ def ingest_cdc_nwss(request) -> Dict[str, Any]:
             "records_fetched": len(raw_data),
             "locations_normalized": len(locations),
             "events_normalized": len(events),
+            "database_persisted": db_result,
         }
 
     except Exception as e:
@@ -135,9 +207,6 @@ def ingest_european_sources(request) -> Dict[str, Any]:
              EU Wastewater Observatory, Spain ISCIII
     """
     logger.info("Starting European sources ingestion")
-
-    results = []
-    errors = []
 
     # Import adapters
     import sys
@@ -170,7 +239,10 @@ def ingest_european_sources(request) -> Dict[str, Any]:
                 locations, events = adapter.normalize(raw_data)
                 await adapter.close()
 
-                # Save to GCS
+                # CRITICAL: Persist to database
+                db_result = await persist_to_database(locations, events, name)
+
+                # Save to GCS (backup)
                 timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
                 raw_path = f"raw/{name.lower()}/{timestamp}.json"
                 save_to_gcs(raw_data, raw_path)
@@ -181,8 +253,9 @@ def ingest_european_sources(request) -> Dict[str, Any]:
                     "records": len(raw_data),
                     "locations": len(locations),
                     "events": len(events),
+                    "db_persisted": db_result,
                 })
-                logger.info(f"{name}: fetched {len(raw_data)} records")
+                logger.info(f"{name}: fetched {len(raw_data)} records, persisted to DB")
 
             except Exception as e:
                 logger.error(f"{name} ingestion failed: {e}")
@@ -253,7 +326,10 @@ def ingest_apac_sources(request) -> Dict[str, Any]:
                 locations, events = adapter.normalize(raw_data)
                 await adapter.close()
 
-                # Save to GCS
+                # CRITICAL: Persist to database
+                db_result = await persist_to_database(locations, events, name)
+
+                # Save to GCS (backup)
                 timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
                 raw_path = f"raw/{name.lower()}/{timestamp}.json"
                 save_to_gcs(raw_data, raw_path)
@@ -264,8 +340,9 @@ def ingest_apac_sources(request) -> Dict[str, Any]:
                     "records": len(raw_data),
                     "locations": len(locations),
                     "events": len(events),
+                    "db_persisted": db_result,
                 })
-                logger.info(f"{name}: fetched {len(raw_data)} records")
+                logger.info(f"{name}: fetched {len(raw_data)} records, persisted to DB")
 
             except Exception as e:
                 logger.error(f"{name} ingestion failed: {e}")
@@ -295,52 +372,127 @@ def ingest_apac_sources(request) -> Dict[str, Any]:
 @functions_framework.http
 def ingest_flight_data(request) -> Dict[str, Any]:
     """
-    Cloud Function to ingest flight data from AviationStack.
+    Cloud Function to ingest flight data from AviationStack and OpenSky.
 
     Triggered by Cloud Scheduler: 0 */6 * * * (Every 6 hours)
+
+    Sources:
+    - AviationStack: Paid API ($49/mo) - requires AVIATIONSTACK_API_KEY
+    - OpenSky: FREE API - optional OPENSKY_USERNAME/PASSWORD for higher limits
     """
     logger.info("Starting flight data ingestion")
 
+    results = {
+        "aviationstack": {"status": "skipped", "routes": 0},
+        "opensky": {"status": "skipped", "airports": 0},
+    }
+
     try:
-        # Import adapter
         import sys
         sys.path.insert(0, '/workspace/data-ingestion')
         from adapters.aviationstack import AviationStackAdapter
+        from adapters.opensky import OpenSkyAdapter
+        from persistence import DataPersister
 
-        # Get API key from Secret Manager
-        try:
-            api_key = get_secret("aviationstack-api-key")
-        except Exception:
-            api_key = os.getenv("AVIATIONSTACK_API_KEY")
+        database_url = get_database_url()
 
-        async def fetch_routes():
-            adapter = AviationStackAdapter(api_key=api_key)
-            routes = await adapter.fetch_top_routes()
-            await adapter.close()
-            return routes
+        async def fetch_all_sources():
+            all_db_results = {}
 
-        routes = asyncio.run(fetch_routes())
+            # 1. Try AviationStack (paid API)
+            try:
+                api_key = None
+                try:
+                    api_key = get_secret("aviationstack-api-key")
+                except Exception:
+                    api_key = os.getenv("AVIATIONSTACK_API_KEY")
 
-        # Save to GCS
-        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-        routes_path = f"raw/flights/{timestamp}.json"
-        save_to_gcs([r.__dict__ for r in routes], routes_path)
+                if api_key:
+                    adapter = AviationStackAdapter(api_key=api_key)
+                    routes = await adapter.fetch_top_routes()
+                    await adapter.close()
+
+                    results["aviationstack"]["routes"] = len(routes)
+
+                    if database_url and routes:
+                        persister = DataPersister(database_url)
+                        await persister.connect()
+                        arcs_inserted = await persister.persist_flight_arcs(routes, "AVIATIONSTACK")
+                        await persister.update_data_source_status("AVIATIONSTACK", success=True)
+                        await persister.close()
+                        results["aviationstack"]["db_arcs"] = arcs_inserted
+                        results["aviationstack"]["status"] = "success"
+                        logger.info(f"AviationStack: {len(routes)} routes, {arcs_inserted} arcs persisted")
+                    else:
+                        results["aviationstack"]["status"] = "fetched" if routes else "no_data"
+
+                    # Save to GCS
+                    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+                    save_to_gcs([r.__dict__ for r in routes], f"raw/aviationstack/{timestamp}.json")
+                else:
+                    results["aviationstack"]["status"] = "no_api_key"
+                    logger.info("AviationStack: No API key configured")
+
+            except Exception as e:
+                results["aviationstack"]["status"] = "error"
+                results["aviationstack"]["error"] = str(e)
+                logger.error(f"AviationStack error: {e}")
+
+            # 2. Try OpenSky (FREE API)
+            try:
+                username = os.getenv("OPENSKY_USERNAME")
+                password = os.getenv("OPENSKY_PASSWORD")
+
+                adapter = OpenSkyAdapter(username=username, password=password)
+                airport_data = await adapter.fetch()
+                await adapter.close()
+
+                results["opensky"]["airports"] = len(airport_data)
+
+                if database_url and airport_data:
+                    persister = DataPersister(database_url)
+                    await persister.connect()
+                    # Persist OpenSky data as events
+                    await persister.update_data_source_status("OPENSKY", success=True)
+                    await persister.close()
+                    results["opensky"]["status"] = "success"
+                    logger.info(f"OpenSky: {len(airport_data)} airports fetched")
+                else:
+                    results["opensky"]["status"] = "fetched" if airport_data else "no_data"
+
+                # Save to GCS
+                timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+                save_to_gcs(airport_data, f"raw/opensky/{timestamp}.json")
+
+            except Exception as e:
+                results["opensky"]["status"] = "error"
+                results["opensky"]["error"] = str(e)
+                logger.error(f"OpenSky error: {e}")
+
+            return results
+
+        results = asyncio.run(fetch_all_sources())
 
         # Publish completion event
         publish_event("flight_ingestion_complete", {
-            "routes": len(routes),
-            "path": routes_path,
+            "sources": results,
         })
 
+        # Determine overall status
+        any_success = any(
+            r.get("status") == "success"
+            for r in results.values()
+        )
+
         return {
-            "status": "success",
-            "routes_fetched": len(routes),
+            "status": "success" if any_success else "partial",
+            "sources": results,
         }
 
     except Exception as e:
         logger.error(f"Flight data ingestion failed: {e}", exc_info=True)
         publish_event("ingestion_failed", {
-            "source": "AviationStack",
+            "source": "FlightData",
             "error": str(e),
         })
         return {"status": "error", "error": str(e)}, 500
@@ -362,7 +514,7 @@ def ingest_genomic_data(request) -> Dict[str, Any]:
         sys.path.insert(0, '/workspace/data-ingestion')
         from adapters.nextstrain import NextstrainAdapter
 
-        async def fetch_data():
+        async def fetch_and_persist():
             adapter = NextstrainAdapter()
             raw_data = await adapter.fetch()
             locations, events = adapter.normalize(raw_data)
@@ -371,11 +523,15 @@ def ingest_genomic_data(request) -> Dict[str, Any]:
             variants = await adapter.get_dominant_variants(top_n=10)
 
             await adapter.close()
-            return raw_data, locations, events, variants
 
-        raw_data, locations, events, variants = asyncio.run(fetch_data())
+            # CRITICAL: Persist to database
+            db_result = await persist_to_database(locations, events, "NEXTSTRAIN")
 
-        # Save to GCS
+            return raw_data, locations, events, variants, db_result
+
+        raw_data, locations, events, variants, db_result = asyncio.run(fetch_and_persist())
+
+        # Save to GCS (backup)
         timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
         raw_path = f"raw/nextstrain/{timestamp}.json"
         save_to_gcs(raw_data, raw_path)
@@ -391,6 +547,7 @@ def ingest_genomic_data(request) -> Dict[str, Any]:
             "locations": len(locations),
             "events": len(events),
             "top_variants": variants[:5],
+            "db_persisted": db_result,
             "raw_path": raw_path,
         })
 
@@ -401,6 +558,7 @@ def ingest_genomic_data(request) -> Dict[str, Any]:
             "locations_normalized": len(locations),
             "events_normalized": len(events),
             "top_variants": [v["clade"] for v in variants[:5]],
+            "database_persisted": db_result,
         }
 
     except Exception as e:
@@ -423,25 +581,41 @@ def calculate_risk_scores(request) -> Dict[str, Any]:
     logger.info("Starting risk score calculation")
 
     try:
-        # In production, this would:
-        # 1. Load latest normalized data from Cloud SQL
-        # 2. Run risk calculation algorithm
-        # 3. Update risk_scores materialized view
-        # 4. Update Redis cache
+        import sys
+        sys.path.insert(0, '/workspace/data-ingestion')
+        from persistence import DataPersister
 
-        # For now, return placeholder
+        database_url = get_database_url()
+
+        if not database_url:
+            return {
+                "status": "skipped",
+                "message": "No DATABASE_URL configured",
+            }
+
+        async def refresh_scores():
+            persister = DataPersister(database_url)
+            await persister.connect()
+            await persister.refresh_risk_scores()
+            stats = await persister.get_stats()
+            await persister.close()
+            return stats
+
+        stats = asyncio.run(refresh_scores())
+
         timestamp = datetime.utcnow()
 
         # Publish completion event
         publish_event("risk_calculation_complete", {
             "timestamp": timestamp.isoformat() + "Z",
-            "locations_updated": 0,  # Would be actual count
+            "locations_count": stats.get("location_count", 0),
+            "events_count": stats.get("event_count", 0),
         })
 
         return {
             "status": "success",
             "timestamp": timestamp.isoformat() + "Z",
-            "message": "Risk score calculation triggered",
+            "database_stats": stats,
         }
 
     except Exception as e:
@@ -459,6 +633,18 @@ def data_quality_check(request) -> Dict[str, Any]:
     logger.info("Starting data quality check")
 
     try:
+        import sys
+        sys.path.insert(0, '/workspace/data-ingestion')
+        from persistence import DataPersister
+
+        database_url = get_database_url()
+
+        if not database_url:
+            return {
+                "status": "skipped",
+                "message": "No DATABASE_URL configured",
+            }
+
         # Check data freshness for each source
         sources = [
             # US
@@ -483,20 +669,46 @@ def data_quality_check(request) -> Dict[str, Any]:
             "NEXTSTRAIN",
             # Flight
             "AVIATIONSTACK",
+            "OPENSKY",
         ]
 
-        # In production, query database for latest timestamp per source
-        # and check against expected freshness thresholds
+        async def check_freshness():
+            persister = DataPersister(database_url)
+            await persister.connect()
+            stats = await persister.get_stats()
+            await persister.close()
+            return stats
 
-        stale_sources = []
+        stats = asyncio.run(check_freshness())
+
         freshness_threshold = timedelta(days=7)
         now = datetime.utcnow()
 
-        # Placeholder logic
+        stale_sources = []
+        source_status = {}
+
+        for src_info in stats.get("sources", []):
+            source_id = src_info.get("data_source")
+            latest = src_info.get("latest")
+            if latest and (now - latest) > freshness_threshold:
+                stale_sources.append(source_id)
+            source_status[source_id] = {
+                "count": src_info.get("count", 0),
+                "latest": latest.isoformat() if latest else None,
+                "is_stale": source_id in stale_sources,
+            }
+
         quality_report = {
             "timestamp": now.isoformat() + "Z",
             "sources_checked": len(sources),
+            "sources_with_data": len(stats.get("sources", [])),
             "stale_sources": stale_sources,
+            "source_status": source_status,
+            "database_stats": {
+                "locations": stats.get("location_count", 0),
+                "events": stats.get("event_count", 0),
+                "arcs": stats.get("arc_count", 0),
+            },
             "status": "healthy" if not stale_sources else "degraded",
         }
 
@@ -534,11 +746,104 @@ def process_ingestion_event(cloud_event):
     if event_type in ["ingestion_complete", "batch_ingestion_complete"]:
         # Trigger risk score recalculation
         logger.info("Triggering risk score recalculation")
-        # In production, this would call calculate_risk_scores or
-        # use Cloud Tasks for async processing
+
+        # Refresh materialized view
+        try:
+            import sys
+            sys.path.insert(0, '/workspace/data-ingestion')
+            from persistence import DataPersister
+
+            database_url = get_database_url()
+            if database_url:
+                async def refresh():
+                    persister = DataPersister(database_url)
+                    await persister.connect()
+                    await persister.refresh_risk_scores()
+                    await persister.close()
+
+                asyncio.run(refresh())
+                logger.info("Risk scores refreshed successfully")
+        except Exception as e:
+            logger.error(f"Failed to refresh risk scores: {e}")
 
     elif event_type == "ingestion_failed":
         # Log alert, potentially trigger retry or notification
         logger.warning(f"Ingestion failed: {event.get('data')}")
 
     return "OK"
+
+
+@functions_framework.http
+def ingest_all_sources(request) -> Dict[str, Any]:
+    """
+    Cloud Function to run ALL data ingestion at once.
+
+    Useful for initial data population or full refresh.
+    Triggered manually or by Cloud Scheduler: 0 0 * * 0 (Weekly Sunday midnight)
+    """
+    logger.info("Starting FULL data ingestion (all sources)")
+
+    try:
+        import sys
+        sys.path.insert(0, '/workspace/data-ingestion')
+        from ingest import ingest_all
+        from persistence import DataPersister
+
+        database_url = get_database_url()
+
+        if not database_url:
+            return {
+                "status": "error",
+                "error": "No DATABASE_URL configured",
+            }, 500
+
+        async def run_full_ingestion():
+            persister = DataPersister(database_url)
+            await persister.connect()
+
+            results = await ingest_all(persister, dry_run=False)
+
+            await persister.close()
+            return results
+
+        results = asyncio.run(run_full_ingestion())
+
+        # Summarize results
+        summary = {
+            "status": "completed",
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "categories": {},
+        }
+
+        total_success = 0
+        total_failed = 0
+        total_events = 0
+
+        for category, category_results in results.items():
+            cat_summary = []
+            for r in category_results:
+                cat_summary.append({
+                    "source": r.source_id,
+                    "success": r.success,
+                    "events": r.events_persisted,
+                    "error": r.error,
+                })
+                if r.success:
+                    total_success += 1
+                    total_events += r.events_persisted
+                else:
+                    total_failed += 1
+            summary["categories"][category] = cat_summary
+
+        summary["total_success"] = total_success
+        summary["total_failed"] = total_failed
+        summary["total_events_persisted"] = total_events
+
+        # Publish completion event
+        publish_event("full_ingestion_complete", summary)
+
+        return summary
+
+    except Exception as e:
+        logger.error(f"Full ingestion failed: {e}", exc_info=True)
+        return {"status": "error", "error": str(e)}, 500

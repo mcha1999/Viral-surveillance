@@ -45,12 +45,17 @@ from .brazil_wastewater import BrazilFiocruzAdapter
 # Genomic data adapter (new)
 from .nextstrain import NextstrainAdapter
 
-# Flight data adapter
+# Flight data adapters
 from .aviationstack import (
     AviationStackAdapter,
     FlightRoute,
     VectorArc,
     calculate_import_pressure,
+)
+from .opensky import (
+    OpenSkyAdapter,
+    FlightArrival,
+    AirportFlightData,
 )
 
 # Registry of all wastewater adapters
@@ -83,6 +88,7 @@ GENOMIC_ADAPTERS = {
 # Registry of flight data adapters
 FLIGHT_ADAPTERS = {
     "AVIATIONSTACK": AviationStackAdapter,
+    "OPENSKY": OpenSkyAdapter,
 }
 
 
@@ -223,11 +229,14 @@ __all__ = [
     "BrazilFiocruzAdapter",
     # Genomic adapters
     "NextstrainAdapter",
-    # Flight adapter
+    # Flight adapters
     "AviationStackAdapter",
     "FlightRoute",
     "VectorArc",
     "calculate_import_pressure",
+    "OpenSkyAdapter",
+    "FlightArrival",
+    "AirportFlightData",
     # Registries
     "WASTEWATER_ADAPTERS",
     "GENOMIC_ADAPTERS",
